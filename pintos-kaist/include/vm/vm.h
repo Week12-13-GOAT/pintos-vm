@@ -73,6 +73,8 @@ struct frame
 {
 	void *kva;
 	struct page *page;
+	//frame_table 소속 elem
+	struct list_elem elem;
 };
 
 /* 페이지 작업을 위한 함수 테이블입니다.
@@ -131,5 +133,8 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 void vm_dealloc_page(struct page *page);
 bool vm_claim_page(void *va);
 enum vm_type page_get_type(struct page *page);
+
+void frame_table_insert(struct list_elem *elem);
+struct frame *frame_table_remove(void);
 
 #endif /* VM_VM_H */

@@ -34,10 +34,12 @@ page_get_type(struct page *page)
 }
 
 /* Helpers */
+void hash_spt_entry_kill(struct hash_elem *e, void *aux);
 static struct frame *vm_get_victim(void);
 static bool vm_do_claim_page(struct page *page);
 static struct frame *vm_evict_frame(void);
-void hash_spt_entry_kill(struct hash_elem *e, void *aux);
+static uint64_t my_hash(const struct hash_elem *e, void *aux UNUSED);
+static bool my_less(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
 
 /* 초기화 함수와 함께 대기 중인 페이지 객체를 생성합니다. 페이지를 직접 생성하지 말고,
  * 반드시 이 함수나 `vm_alloc_page`를 통해 생성하세요. */
@@ -90,10 +92,19 @@ err:
 struct page *
 spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 {
-	struct page *page = NULL;
-	/* TODO: Fill this function. */
+	// 더미 SPT_entry를 생성하여 va 값 기반 hash 조회
+	struct page *finding_page = NULL;
+	struct SPT_entry lookup;
+	lookup.va = va;
 
-	return page;
+	// 인자는 더미 SPT_entry, 반환된 finding_hash_elem은 실제 SPT_entry 소속 hash_elem
+	struct hash_elem *finding_hash_elem = hash_find(&spt->SPT_hash_list, &lookup.elem);
+
+	// 탐색 성공 시, hash_elem로 entry 조회, page 확보
+	if (finding_hash_elem != NULL)
+		finding_page = hash_entry(finding_hash_elem, struct SPT_entry, elem)->page;
+
+	return finding_page;
 }
 
 /* Insert PAGE into spt with validation. */
@@ -293,4 +304,20 @@ void hash_spt_entry_kill(struct hash_elem *e, void *aux)
 	 * 따라서 페이지의 타입에 따라 다른 destory 함수가 호출될 것으로 기대됩니다.
 	 */
 	spt_remove_page(&thread_current()->spt, entry->page);
+}
+
+void frame_table_insert(struct list_elem *elem)
+{
+	struct thread *cur = thread_current();
+	list_push_back(&cur->frame_table, elem);
+	return;
+}
+
+struct frame *frame_table_remove(void)
+{
+	struct thread *cur = thread_current();
+
+	if (list_empty(&cur->frame_table))
+		return NULL;
+	return list_entry(list_pop_front(&cur->frame_table), struct frame, elem);
 }
