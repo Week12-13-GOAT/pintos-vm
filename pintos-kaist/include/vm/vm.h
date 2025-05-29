@@ -134,4 +134,7 @@ void vm_dealloc_page(struct page *page);
 bool vm_claim_page(void *va);
 enum vm_type page_get_type(struct page *page);
 
+void frame_table_insert(struct list_elem *elem);
+struct frame *frame_table_remove(void);
+
 #endif /* VM_VM_H */
