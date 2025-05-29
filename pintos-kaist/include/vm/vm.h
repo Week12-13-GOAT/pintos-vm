@@ -2,6 +2,7 @@
 #define VM_VM_H
 #include <stdbool.h>
 #include "threads/palloc.h"
+#include "hash.h"
 
 enum vm_type
 {
@@ -97,6 +98,16 @@ struct page_operations
  * 모든 설계는 여러분에게 달려 있습니다. */
 struct supplemental_page_table
 {
+	struct hash SPT_hash_list;
+};
+
+struct SPT_entry
+{
+	/* 이 엔트리의 키 값이 될 가상 주소 */
+	void *va;
+	/* 페이지 */
+	struct page *page;
+	struct hash_elem elem;
 };
 
 #include "threads/thread.h"

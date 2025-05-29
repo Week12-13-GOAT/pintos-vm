@@ -237,6 +237,21 @@ vm_do_claim_page(struct page *page)
 /* Initialize new supplemental page table */
 void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 {
+	if (!hash_init(&spt->SPT_hash_list, my_hash, my_less, NULL))
+		return;
+}
+
+static uint64_t my_hash(const struct hash_elem *e, void *aux UNUSED)
+{
+	struct SPT_entry *entry = hash_entry(e, struct SPT_entry, elem);
+	return hash_int((uint64_t)entry->va);
+}
+
+static bool my_less(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED)
+{
+	struct SPT_entry *a_entry = hash_entry(a, struct SPT_entry, elem);
+	struct SPT_entry *b_entry = hash_entry(b, struct SPT_entry, elem);
+	return (uint64_t)a_entry->va > (uint64_t)b_entry->va;
 }
 
 /* Copy supplemental page table from src to dst */
