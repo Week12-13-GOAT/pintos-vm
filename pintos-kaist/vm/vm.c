@@ -34,6 +34,7 @@ page_get_type(struct page *page)
 }
 
 /* Helpers */
+static void hash_spt_entry_kill(struct hash_elem *e, void *aux);
 static struct frame *vm_get_victim(void);
 static bool vm_do_claim_page(struct page *page);
 static struct frame *vm_evict_frame(void);
@@ -91,16 +92,16 @@ err:
 struct page *
 spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 {
-	//더미 SPT_entry를 생성하여 va 값 기반 hash 조회
+	// 더미 SPT_entry를 생성하여 va 값 기반 hash 조회
 	struct page *finding_page = NULL;
 	struct SPT_entry lookup;
 	lookup.va = va;
 
-	//인자는 더미 SPT_entry, 반환된 finding_hash_elem은 실제 SPT_entry 소속 hash_elem
-	struct hash_elem *finding_hash_elem = hash_find(&spt->SPT_hash_list,&lookup.elem);
+	// 인자는 더미 SPT_entry, 반환된 finding_hash_elem은 실제 SPT_entry 소속 hash_elem
+	struct hash_elem *finding_hash_elem = hash_find(&spt->SPT_hash_list, &lookup.elem);
 
-	//탐색 성공 시, hash_elem로 entry 조회, page 확보
-	if(finding_hash_elem != NULL)
+	// 탐색 성공 시, hash_elem로 entry 조회, page 확보
+	if (finding_hash_elem != NULL)
 		finding_page = hash_entry(finding_hash_elem, struct SPT_entry, elem)->page;
 
 	return finding_page;
@@ -118,12 +119,26 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
 {
+	struct SPT_entry lookup;
+	/* 내가 찾을 페이지의 가상 주소를 넣습니다 */
+	lookup.va = page->va;
+	/* SPT_hash_list에서 해당 가상 주소를 가진 엔트리를 제거합니다 */
+	struct hash_elem *delete_elem = hash_delete(&spt->SPT_hash_list, &lookup.elem);
+	if (delete_elem == NULL)
+		return;
+	struct SPT_entry *deleted = hash_entry(delete_elem, struct SPT_entry, elem);
+
+	/* 페이지 테이블에서 해당 가상 페이지 삭제 */
+	pml4_clear_page(thread_current()->pml4, page->va);
 	vm_dealloc_page(page);
 	/** TODO: page 해제
 	 * 매핑된 프레임을 해제해야하나?
 	 * 프레임이 스왑되어있는지 체크할것?
 	 * 아마 pml4_clear_page 사용하면 된대요
 	 */
+
+	/* 내부 페이지의 요소가 모두 free 된 이후 SPT_entry free */
+	free(deleted);
 	return true;
 }
 
@@ -262,7 +277,7 @@ static bool my_less(const struct hash_elem *a, const struct hash_elem *b, void *
 {
 	struct SPT_entry *a_entry = hash_entry(a, struct SPT_entry, elem);
 	struct SPT_entry *b_entry = hash_entry(b, struct SPT_entry, elem);
-	return (uint64_t)a_entry->va > (uint64_t)b_entry->va;
+	return (uint64_t)a_entry->va < (uint64_t)b_entry->va;
 }
 
 /* Copy supplemental page table from src to dst */
@@ -276,18 +291,33 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 {
 	/* TODO: 스레드가 보유한 모든 supplemental_page_table을 제거하고,
 	 * TODO: 수정된 내용을 스토리지에 기록(writeback)하세요. */
+	struct thread *cur = thread_current();
+	hash_destroy(&spt->SPT_hash_list, hash_spt_entry_kill);
 }
 
-void frame_table_insert(struct list_elem *elem){
+static void hash_spt_entry_kill(struct hash_elem *e, void *aux)
+{
+	struct SPT_entry *entry = hash_entry(e, struct SPT_entry, elem);
+	/** spt_remove_page는 내부적으로 vm_delloc_page를 호출하고,
+	 * vm_delloc_page는 내부적으로 destroy 매크로를 호출한 다음
+	 * free(page)를 진행합니다.
+	 * 따라서 페이지의 타입에 따라 다른 destory 함수가 호출될 것으로 기대됩니다.
+	 */
+	spt_remove_page(&thread_current()->spt, entry->page);
+}
+
+void frame_table_insert(struct list_elem *elem)
+{
 	struct thread *cur = thread_current();
 	list_push_back(&cur->frame_table, elem);
 	return;
 }
 
-struct frame *frame_table_remove(void){
+struct frame *frame_table_remove(void)
+{
 	struct thread *cur = thread_current();
-	
-	if(list_empty(&cur->frame_table)) 
+
+	if (list_empty(&cur->frame_table))
 		return NULL;
 	return list_entry(list_pop_front(&cur->frame_table), struct frame, elem);
 }
