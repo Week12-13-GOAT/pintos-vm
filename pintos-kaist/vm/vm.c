@@ -89,10 +89,19 @@ err:
 struct page *
 spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 {
-	struct page *page = NULL;
-	/* TODO: Fill this function. */
+	//더미 SPT_entry를 생성하여 va 값 기반 hash 조회
+	struct page *finding_page = NULL;
+	struct SPT_entry lookup;
+	lookup.va = va;
 
-	return page;
+	//인자는 더미 SPT_entry, 반환된 finding_hash_elem은 실제 SPT_entry 소속 hash_elem
+	struct hash_elem *finding_hash_elem = hash_find(&spt->SPT_hash_list,&lookup.elem);
+
+	//탐색 성공 시, hash_elem로 entry 조회, page 확보
+	if(finding_hash_elem != NULL)
+		finding_page = hash_entry(finding_hash_elem, struct SPT_entry, elem)->page;
+
+	return finding_page;
 }
 
 /* Insert PAGE into spt with validation. */
