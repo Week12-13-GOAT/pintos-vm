@@ -616,6 +616,9 @@ init_thread(struct thread *t, const char *name, int priority)
 		}
 	}
 
+#ifdef VM
+	list_init(&t->frame_table);
+#endif
 	list_init(&t->children_list);
 	list_init(&t->donations);
 	list_push_back(&all_list, &t->all_elem);

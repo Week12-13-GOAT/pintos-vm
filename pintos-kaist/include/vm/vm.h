@@ -73,6 +73,8 @@ struct frame
 {
 	void *kva;
 	struct page *page;
+	//frame_table 소속 elem
+	struct list_elem elem;
 };
 
 /* 페이지 작업을 위한 함수 테이블입니다.

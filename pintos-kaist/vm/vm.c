@@ -37,6 +37,8 @@ page_get_type(struct page *page)
 static struct frame *vm_get_victim(void);
 static bool vm_do_claim_page(struct page *page);
 static struct frame *vm_evict_frame(void);
+static uint64_t my_hash(const struct hash_elem *e, void *aux UNUSED);
+static bool my_less(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
 
 /* 초기화 함수와 함께 대기 중인 페이지 객체를 생성합니다. 페이지를 직접 생성하지 말고,
  * 반드시 이 함수나 `vm_alloc_page`를 통해 생성하세요. */
@@ -274,4 +276,18 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 {
 	/* TODO: 스레드가 보유한 모든 supplemental_page_table을 제거하고,
 	 * TODO: 수정된 내용을 스토리지에 기록(writeback)하세요. */
+}
+
+void frame_table_insert(struct list_elem *elem){
+	struct thread *cur = thread_current();
+	list_push_back(&cur->frame_table, elem);
+	return;
+}
+
+struct frame *frame_table_remove(void){
+	struct thread *cur = thread_current();
+	
+	if(list_empty(&cur->frame_table)) 
+		return NULL;
+	return list_entry(list_pop_front(&cur->frame_table), struct frame, elem);
 }
