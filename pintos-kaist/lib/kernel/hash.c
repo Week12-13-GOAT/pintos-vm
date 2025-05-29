@@ -92,14 +92,20 @@ void hash_destroy(struct hash *h, hash_action_func *destructor)
 struct hash_elem *
 hash_insert(struct hash *h, struct hash_elem *new)
 {
+	// 1단계 : 삽입할 위치(버킷) 찾기
 	struct list *bucket = find_bucket(h, new);
+
+	// 2단계 : 동일한 요소가 이미 있는지 확인
 	struct hash_elem *old = find_elem(h, bucket, new);
 
+	// 3단계 : 중복이 없으면 삽입
 	if (old == NULL)
 		insert_elem(h, bucket, new);
 
+	// 4단계 : 필요시 해시 테이블 크기 조정
 	rehash(h);
 
+	// 5단계 : 결과 -> NULL이면 삽입 성공, 아니면 기존 요소 반환
 	return old;
 }
 

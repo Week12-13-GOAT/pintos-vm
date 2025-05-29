@@ -4,6 +4,8 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "threads/mmu.h"
+//Project 3 : VM
+#include "kernel/hash.h"
 
 /* 각 서브시스템의 초기화 코드를 호출하여 가상 메모리 서브시스템을 초기화합니다. */
 void vm_init(void)
@@ -59,6 +61,11 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		 * TODO: uninit_new 호출 후에는 필요한 필드를 수정해야 합니다. */
 		bool (*page_initializer)(struct page *, enum vm_type, void *kva);
 		struct page *page = malloc(sizeof(struct page));
+
+		if (page == NULL) {
+			goto err;
+		}
+
 		page->writable = writable;
 
 		switch (VM_TYPE(type))
@@ -81,7 +88,17 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		uninit_new(page, upage, init, type, aux, page_initializer);
 
 		/* TODO: 생성한 페이지를 spt에 삽입하세요. */
+		if (!spt_insert_page(spt, page)) {
+			// 실패 시 메모리 누수 방지 위해 free
+			free(page);
+			// 실패 했으니까 에러로 가야겠지? 
+			goto err;
+		}
+
+		return true;
 	}
+
+	return false;
 err:
 	return false;
 }
@@ -111,10 +128,31 @@ spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 					 struct page *page UNUSED)
 {
-	int succ = false;
+	//int succ = false;
 	/* TODO: Fill this function. */
 
-	return succ;
+	// 예외 처리
+	if (spt == NULL || page == NULL) {
+		return false;
+	}
+
+	// 메모리 할당
+	struct SPT_entry *entry = malloc(sizeof(struct SPT_entry));
+	// 예외 처리
+	if (entry == NULL) {
+		return false;
+	}
+
+	entry->va = page->va;	// 가상 주소 : page 구조체의 va 필드 -> SPT_entry의 va 필드
+	entry->page = page;		// 페이지 참조 : page 구조체의 주소 -> SPT_entry의 apge 포인터
+
+	if (hash_insert(&spt->SPT_hash_list, &entry->elem) != NULL) {
+		// 삽입 실패시 메모리 정리
+		free(entry);
+		return false;	// 삽입 실패
+	}
+
+	return true;	// SPT 페이지 삽입 성공
 }
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
@@ -284,6 +322,26 @@ static bool my_less(const struct hash_elem *a, const struct hash_elem *b, void *
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED)
 {
+	// 예외 처리
+	if (dst == NULL || src == NULL) {
+		return false;
+	}
+
+	// src SPT의 iterator
+	struct hash_iterator i;
+	hash_first(&i, &src->SPT_hash_list);
+
+	// src SPT의 모든 페이지를 dst SPT로 복사
+	while (hash_next(&i)) {
+		struct SPT_entry *src_entry = hash_entry(hash_cur(&i), struct SPT_entry, elem);
+		if (!vm_alloc_page(page_get_type(src_entry),	// 페이지 타입
+			src_entry->page->va,						// 가상 주소
+			src_entry->page->writable)) {				// 쓰기 권한 
+				return false;							// 할당 실패!
+			}
+	}
+	
+	return true;	// 모든 페이지 복사 성공
 }
 
 /* Free the resource hold by the supplemental page table */
