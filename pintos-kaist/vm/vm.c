@@ -34,7 +34,7 @@ page_get_type(struct page *page)
 }
 
 /* Helpers */
-void hash_spt_entry_kill(struct hash_elem *e, void *aux);
+static void hash_spt_entry_kill(struct hash_elem *e, void *aux);
 static struct frame *vm_get_victim(void);
 static bool vm_do_claim_page(struct page *page);
 static struct frame *vm_evict_frame(void);
@@ -295,7 +295,7 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 	hash_destroy(&spt->SPT_hash_list, hash_spt_entry_kill);
 }
 
-void hash_spt_entry_kill(struct hash_elem *e, void *aux)
+static void hash_spt_entry_kill(struct hash_elem *e, void *aux)
 {
 	struct SPT_entry *entry = hash_entry(e, struct SPT_entry, elem);
 	/** spt_remove_page는 내부적으로 vm_delloc_page를 호출하고,
