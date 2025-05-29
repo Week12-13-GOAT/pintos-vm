@@ -39,6 +39,8 @@ page_get_type(struct page *page)
 static struct frame *vm_get_victim(void);
 static bool vm_do_claim_page(struct page *page);
 static struct frame *vm_evict_frame(void);
+static uint64_t my_hash(const struct hash_elem *e, void *aux UNUSED);
+static bool my_less(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
 
 /* 초기화 함수와 함께 대기 중인 페이지 객체를 생성합니다. 페이지를 직접 생성하지 말고,
  * 반드시 이 함수나 `vm_alloc_page`를 통해 생성하세요. */
@@ -101,10 +103,28 @@ spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 					 struct page *page UNUSED)
 {
-	int succ = false;
+	//int succ = false;
 	/* TODO: Fill this function. */
 
-	return succ;
+	// 예외 처리
+	if (spt == NULL || page == NULL) {
+		return false;
+	}
+
+	struct SPT_entry *entry = malloc(sizeof(struct SPT_entry));
+	if (entry == NULL) {
+		return false;
+	}
+
+	entry->va = page->va;
+	entry->page = page;
+
+	if (hash_insert(&spt->SPT_hash_list, &entry->elem) != NULL) {
+		free(entry);
+		return false;
+	}
+
+	return true;
 }
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
@@ -260,6 +280,7 @@ static bool my_less(const struct hash_elem *a, const struct hash_elem *b, void *
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED)
 {
+	
 }
 
 /* Free the resource hold by the supplemental page table */
