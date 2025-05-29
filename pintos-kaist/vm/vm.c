@@ -60,6 +60,11 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		 * TODO: uninit_new 호출 후에는 필요한 필드를 수정해야 합니다. */
 		bool (*page_initializer)(struct page *, enum vm_type, void *kva);
 		struct page *page = malloc(sizeof(struct page));
+
+		if (page == NULL) {
+			goto err;
+		}
+
 		page->writable = writable;
 
 		switch (VM_TYPE(type))
@@ -82,7 +87,15 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		uninit_new(page, upage, init, type, aux, page_initializer);
 
 		/* TODO: 생성한 페이지를 spt에 삽입하세요. */
+		if (!spt_insert_page(spt, page)) {
+			free(page);
+			goto err;
+		}
+
+		return true;
 	}
+
+	return false;
 err:
 	return false;
 }
@@ -280,7 +293,23 @@ static bool my_less(const struct hash_elem *a, const struct hash_elem *b, void *
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED)
 {
+	if (dst == NULL || src == NULL) {
+		return false;
+	}
+
+	struct hash_iterator i;
+	hash_first(&i, &src->SPT_hash_list);
+
+	while (hash_next(&i)) {
+		struct SPT_entry *src_entry = hash_entry(hash_cur(&i), struct SPT_entry, elem);
+		if (!vm_alloc_page(page_get_type(src_entry),
+			src_entry->page->va,
+			src_entry->page->writable)) {
+				return false;
+			}
+	}
 	
+	return true;
 }
 
 /* Free the resource hold by the supplemental page table */
