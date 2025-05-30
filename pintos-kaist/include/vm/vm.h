@@ -118,8 +118,7 @@ struct lazy_load_info{
 	off_t offset;
 	size_t readbyte;
 	size_t zerobyte;
-}
-
+};
 
 #include "threads/thread.h"
 void supplemental_page_table_init(struct supplemental_page_table *spt);

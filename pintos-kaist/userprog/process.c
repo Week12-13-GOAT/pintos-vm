@@ -776,9 +776,22 @@ lazy_load_segment(struct page *page, void *aux)
 	/* TODO: Load the segment from the file */
 	/* TODO: 이 함수는 해당 VA(가상 주소)에서 첫 페이지 폴트가 발생할 때 호출됩니다. */
 	/* TODO: 이 함수를 호출할 때 VA는 사용할 수 있습니다. */
-
 	// kva는 page 안에 이미 있다
 	// 타입별로 다른 초기화 작업을 거쳐야하나?
+	struct lazy_load_info *lazy_info = (struct lazy_load_info *) aux;
+	struct file *read_file = lazy_info->file;
+
+	if(file_read_at(read_file, 
+					page->frame->kva, 
+					lazy_info->readbyte, 
+					lazy_info->offset) 
+					!= (int) lazy_info->readbyte) {
+					return false;
+	}
+	memset(page->frame->kva + lazy_info->readbyte, 0, lazy_info->zerobyte);
+
+	free(lazy_info);
+	return true;
 }
 
 /* FILE의 OFS 오프셋에서 시작하여 UPAGE 주소에 세그먼트를 로드합니다.
@@ -811,7 +824,14 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;					// 0 패딩 사이즈는 4KB - read_byte
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL; // 전달해야할 인자
+		struct lazy_load_info *aux = malloc(sizeof(struct lazy_load_info)); // 전달해야할 인자
+		if(aux == NULL) return false;
+
+		aux->file = file;
+		aux->offset = ofs;
+		aux->readbyte = page_read_bytes;
+		aux->zerobyte = page_zero_bytes;
+
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
 											writable, lazy_load_segment, aux))
 			return false;
