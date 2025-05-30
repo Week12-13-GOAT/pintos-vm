@@ -85,6 +85,9 @@ static uint64_t gdt[3] = {0,
 
 fixed_t load_avg = 0;
 
+//vm용 프레임 테이블
+struct list frame_table;
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -115,6 +118,7 @@ void thread_init(void)
 	list_init(&ready_list);
 	list_init(&destruction_req);
 	list_init(&all_list);
+	list_init(&frame_table);
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread();
@@ -616,9 +620,6 @@ init_thread(struct thread *t, const char *name, int priority)
 		}
 	}
 
-#ifdef VM
-	list_init(&t->frame_table);
-#endif
 	list_init(&t->children_list);
 	list_init(&t->donations);
 	list_push_back(&all_list, &t->all_elem);
