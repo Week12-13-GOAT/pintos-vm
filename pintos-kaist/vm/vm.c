@@ -4,6 +4,8 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "threads/mmu.h"
+//Project 3 : VM
+#include "kernel/hash.h"
 
 /* 각 서브시스템의 초기화 코드를 호출하여 가상 메모리 서브시스템을 초기화합니다. */
 void vm_init(void)
@@ -34,6 +36,7 @@ page_get_type(struct page *page)
 }
 
 /* Helpers */
+static void hash_spt_entry_kill(struct hash_elem *e, void *aux);
 static struct frame *vm_get_victim(void);
 static bool vm_do_claim_page(struct page *page);
 static struct frame *vm_evict_frame(void);
@@ -58,6 +61,11 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		 * TODO: uninit_new 호출 후에는 필요한 필드를 수정해야 합니다. */
 		bool (*page_initializer)(struct page *, enum vm_type, void *kva);
 		struct page *page = malloc(sizeof(struct page));
+
+		if (page == NULL) {
+			goto err;
+		}
+
 		page->writable = writable;
 
 		switch (VM_TYPE(type))
@@ -80,7 +88,17 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		uninit_new(page, upage, init, type, aux, page_initializer);
 
 		/* TODO: 생성한 페이지를 spt에 삽입하세요. */
+		if (!spt_insert_page(spt, page)) {
+			// 실패 시 메모리 누수 방지 위해 free
+			free(page);
+			// 실패 했으니까 에러로 가야겠지? 
+			goto err;
+		}
+
+		return true;
 	}
+
+	return false;
 err:
 	return false;
 }
@@ -91,16 +109,16 @@ err:
 struct page *
 spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 {
-	//더미 SPT_entry를 생성하여 va 값 기반 hash 조회
+	// 더미 SPT_entry를 생성하여 va 값 기반 hash 조회
 	struct page *finding_page = NULL;
 	struct SPT_entry lookup;
 	lookup.va = va;
 
-	//인자는 더미 SPT_entry, 반환된 finding_hash_elem은 실제 SPT_entry 소속 hash_elem
-	struct hash_elem *finding_hash_elem = hash_find(&spt->SPT_hash_list,&lookup.elem);
+	// 인자는 더미 SPT_entry, 반환된 finding_hash_elem은 실제 SPT_entry 소속 hash_elem
+	struct hash_elem *finding_hash_elem = hash_find(&spt->SPT_hash_list, &lookup.elem);
 
-	//탐색 성공 시, hash_elem로 entry 조회, page 확보
-	if(finding_hash_elem != NULL)
+	// 탐색 성공 시, hash_elem로 entry 조회, page 확보
+	if (finding_hash_elem != NULL)
 		finding_page = hash_entry(finding_hash_elem, struct SPT_entry, elem)->page;
 
 	return finding_page;
@@ -110,20 +128,55 @@ spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 					 struct page *page UNUSED)
 {
-	int succ = false;
+	//int succ = false;
 	/* TODO: Fill this function. */
 
-	return succ;
+	// 예외 처리
+	if (spt == NULL || page == NULL) {
+		return false;
+	}
+
+	// 메모리 할당
+	struct SPT_entry *entry = malloc(sizeof(struct SPT_entry));
+	// 예외 처리
+	if (entry == NULL) {
+		return false;
+	}
+
+	entry->va = page->va;	// 가상 주소 : page 구조체의 va 필드 -> SPT_entry의 va 필드
+	entry->page = page;		// 페이지 참조 : page 구조체의 주소 -> SPT_entry의 apge 포인터
+
+	if (hash_insert(&spt->SPT_hash_list, &entry->elem) != NULL) {
+		// 삽입 실패시 메모리 정리
+		free(entry);
+		return false;	// 삽입 실패
+	}
+
+	return true;	// SPT 페이지 삽입 성공
 }
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
 {
+	struct SPT_entry lookup;
+	/* 내가 찾을 페이지의 가상 주소를 넣습니다 */
+	lookup.va = page->va;
+	/* SPT_hash_list에서 해당 가상 주소를 가진 엔트리를 제거합니다 */
+	struct hash_elem *delete_elem = hash_delete(&spt->SPT_hash_list, &lookup.elem);
+	if (delete_elem == NULL)
+		return;
+	struct SPT_entry *deleted = hash_entry(delete_elem, struct SPT_entry, elem);
+
+	/* 페이지 테이블에서 해당 가상 페이지 삭제 */
+	pml4_clear_page(thread_current()->pml4, page->va);
 	vm_dealloc_page(page);
 	/** TODO: page 해제
 	 * 매핑된 프레임을 해제해야하나?
 	 * 프레임이 스왑되어있는지 체크할것?
 	 * 아마 pml4_clear_page 사용하면 된대요
 	 */
+
+	/* 내부 페이지의 요소가 모두 free 된 이후 SPT_entry free */
+	free(deleted);
 	return true;
 }
 
@@ -262,13 +315,33 @@ static bool my_less(const struct hash_elem *a, const struct hash_elem *b, void *
 {
 	struct SPT_entry *a_entry = hash_entry(a, struct SPT_entry, elem);
 	struct SPT_entry *b_entry = hash_entry(b, struct SPT_entry, elem);
-	return (uint64_t)a_entry->va > (uint64_t)b_entry->va;
+	return (uint64_t)a_entry->va < (uint64_t)b_entry->va;
 }
 
 /* Copy supplemental page table from src to dst */
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED)
 {
+	// 예외 처리
+	if (dst == NULL || src == NULL) {
+		return false;
+	}
+
+	// src SPT의 iterator
+	struct hash_iterator i;
+	hash_first(&i, &src->SPT_hash_list);
+
+	// src SPT의 모든 페이지를 dst SPT로 복사
+	while (hash_next(&i)) {
+		struct SPT_entry *src_entry = hash_entry(hash_cur(&i), struct SPT_entry, elem);
+		if (!vm_alloc_page(page_get_type(src_entry),	// 페이지 타입
+			src_entry->page->va,						// 가상 주소
+			src_entry->page->writable)) {				// 쓰기 권한 
+				return false;							// 할당 실패!
+			}
+	}
+	
+	return true;	// 모든 페이지 복사 성공
 }
 
 /* Free the resource hold by the supplemental page table */
@@ -276,17 +349,31 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 {
 	/* TODO: 스레드가 보유한 모든 supplemental_page_table을 제거하고,
 	 * TODO: 수정된 내용을 스토리지에 기록(writeback)하세요. */
+	struct thread *cur = thread_current();
+	hash_destroy(&spt->SPT_hash_list, hash_spt_entry_kill);
 }
 
-void frame_table_insert(struct list_elem *elem){
+static void hash_spt_entry_kill(struct hash_elem *e, void *aux)
+{
+	struct SPT_entry *entry = hash_entry(e, struct SPT_entry, elem);
+	/** spt_remove_page는 내부적으로 vm_delloc_page를 호출하고,
+	 * vm_delloc_page는 내부적으로 destroy 매크로를 호출한 다음
+	 * free(page)를 진행합니다.
+	 * 따라서 페이지의 타입에 따라 다른 destory 함수가 호출될 것으로 기대됩니다.
+	 */
+	spt_remove_page(&thread_current()->spt, entry->page);
+}
+
+void frame_table_insert(struct list_elem *elem)
+{
 	struct thread *cur = thread_current();
 	list_push_back(&frame_table, elem);
 	return;
 }
 
-struct frame *frame_table_remove(void){
+struct frame *frame_table_remove(void)
+{
 	struct thread *cur = thread_current();
-	
 	if(list_empty(&frame_table)) 
 		return NULL;
 	return list_entry(list_pop_front(&frame_table), struct frame, elem);

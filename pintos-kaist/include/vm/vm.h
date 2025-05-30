@@ -109,6 +109,7 @@ struct SPT_entry
 	void *va;
 	/* 페이지 */
 	struct page *page;
+	/* 해시 테이블 요소*/
 	struct hash_elem elem;
 };
 
