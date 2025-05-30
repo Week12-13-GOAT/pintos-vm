@@ -135,7 +135,6 @@ struct thread
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
 	struct supplemental_page_table spt;
-	struct list frame_table;
 #endif
 
 	/* Owned by thread.c. */
@@ -147,6 +146,7 @@ struct thread
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+extern struct list frame_table;
 
 void thread_init(void);
 void thread_start(void);

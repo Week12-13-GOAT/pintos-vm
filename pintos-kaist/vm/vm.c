@@ -280,14 +280,14 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 
 void frame_table_insert(struct list_elem *elem){
 	struct thread *cur = thread_current();
-	list_push_back(&cur->frame_table, elem);
+	list_push_back(&frame_table, elem);
 	return;
 }
 
 struct frame *frame_table_remove(void){
 	struct thread *cur = thread_current();
 	
-	if(list_empty(&cur->frame_table)) 
+	if(list_empty(&frame_table)) 
 		return NULL;
-	return list_entry(list_pop_front(&cur->frame_table), struct frame, elem);
+	return list_entry(list_pop_front(&frame_table), struct frame, elem);
 }
