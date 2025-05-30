@@ -148,7 +148,7 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 	}
 
 	entry->va = page->va; // 가상 주소 : page 구조체의 va 필드 -> SPT_entry의 va 필드
-	entry->page = page;	  // 페이지 참조 : page 구조체의 주소 -> SPT_entry의 apge 포인터
+	entry->page = page;	  // 페이지 참조 : page 구조체의 주소 -> SPT_entry의 page 포인터
 
 	if (hash_insert(&spt->SPT_hash_list, &entry->elem) != NULL)
 	{
