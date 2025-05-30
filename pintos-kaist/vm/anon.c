@@ -38,12 +38,21 @@ void vm_anon_init(void)
 
 /* Initialize the file mapping */
 bool anon_initializer(struct page *page, enum vm_type type, void *kva)
-{
+{	
+	// 들어온 page가 null일 경우
+	if (page == NULL) {
+		return false;
+	}
 	/* Set up the handler */
 	page->operations = &anon_ops;
 
+	/* uninit을 anon으로 변환*/
 	struct anon_page *anon_page = &page->anon;
+	
+	/* swap index 초기화 */
 	anon_page->swap_idx = -1;
+
+	return true;
 }
 
 /* 스왑 디스크에서 내용을 읽어와 페이지를 스왑인합니다. */
