@@ -10,8 +10,8 @@
 #include "vm/vm.h"
 #include "vm/uninit.h"
 
-static bool uninit_initialize (struct page *page, void *kva);
-static void uninit_destroy (struct page *page);
+static bool uninit_initialize(struct page *page, void *kva);
+static void uninit_destroy(struct page *page);
 
 /* DO NOT MODIFY this struct */
 static const struct page_operations uninit_ops = {
@@ -22,28 +22,28 @@ static const struct page_operations uninit_ops = {
 };
 
 /* DO NOT MODIFY this function */
-void
-uninit_new (struct page *page, void *va, vm_initializer *init,
-		enum vm_type type, void *aux,
-		bool (*initializer)(struct page *, enum vm_type, void *)) {
-	ASSERT (page != NULL);
+void uninit_new(struct page *page, void *va, vm_initializer *init,
+				enum vm_type type, void *aux,
+				bool (*initializer)(struct page *, enum vm_type, void *))
+{
+	ASSERT(page != NULL);
 
-	*page = (struct page) {
+	*page = (struct page){
 		.operations = &uninit_ops,
 		.va = va,
 		.frame = NULL, /* no frame for now */
-		.uninit = (struct uninit_page) {
+		.uninit = (struct uninit_page){
 			.init = init,
 			.type = type,
 			.aux = aux,
 			.page_initializer = initializer,
-		}
-	};
+		}};
 }
 
 /* 첫 번째 폴트 시 페이지를 초기화합니다 */
 static bool
-uninit_initialize (struct page *page, void *kva) {
+uninit_initialize(struct page *page, void *kva)
+{
 	struct uninit_page *uninit = &page->uninit;
 
 	/* 먼저 가져옵니다. page_initialize가 값을 덮어쓸 수 있습니다. */
@@ -51,16 +51,18 @@ uninit_initialize (struct page *page, void *kva) {
 	void *aux = uninit->aux;
 
 	/* TODO: 이 함수를 수정해야 할 수도 있습니다. */
-	return uninit->page_initializer (page, uninit->type, kva) &&
-		(init ? init (page, aux) : true);
+	return uninit->page_initializer(page, uninit->type, kva) &&
+		   (init ? init(page, aux) : true);
 }
 
 /* uninit_page가 보유한 리소스를 해제합니다. 대부분의 페이지는 다른 페이지 객체로 변환되지만,
  * 실행 중 한 번도 참조되지 않은 uninit 페이지가 프로세스 종료 시 남아 있을 수 있습니다.
  * PAGE 자체는 호출자가 해제합니다. */
 static void
-uninit_destroy (struct page *page) {
+uninit_destroy(struct page *page)
+{
 	struct uninit_page *uninit UNUSED = &page->uninit;
 	/* TODO: 이 함수를 구현하세요.
 	 * TODO: 특별히 할 일이 없다면 그냥 return 하세요. */
+	free(uninit->aux);
 }

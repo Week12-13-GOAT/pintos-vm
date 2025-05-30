@@ -356,6 +356,8 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 		{				  // 쓰기 권한
 			return false; // 할당 실패!
 		}
+		/* 가상 페이지 복사 이후 물리 프레임 명시적 할당 */
+		vm_claim_page(src_entry->page->va);
 	}
 
 	return true; // 모든 페이지 복사 성공
