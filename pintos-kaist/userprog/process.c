@@ -259,6 +259,8 @@ int process_exec(void *f_name)
 	/* 현재 컨텍스트를 제거합니다. */
 	process_cleanup();
 
+	supplemental_page_table_init(&thread_current()->spt);
+
 	/* 그리고 이진 파일을 로드합니다. */
 	ASSERT(cp_file_name != NULL);
 	success = load(cp_file_name, &_if);
