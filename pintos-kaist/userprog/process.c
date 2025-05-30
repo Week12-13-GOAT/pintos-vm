@@ -257,6 +257,7 @@ int process_exec(void *f_name)
 		i++;
 	}
 	first_word[i] = '\0';
+	// 여기까지 임시방편 코드
 
 	bool success;
 
@@ -268,8 +269,8 @@ int process_exec(void *f_name)
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
-	/* 현재 컨텍스트를 제거합니다. */
 	struct file *new_file = filesys_open(first_word);
+	/* 현재 컨텍스트를 제거합니다. */
 	if (new_file == NULL)
 		return -1;
 	process_cleanup();
@@ -283,6 +284,7 @@ int process_exec(void *f_name)
 	palloc_free_page(file_name);
 	if (!success)
 		return -1;
+	/* 수정이 필요할 수도 있음 */
 	thread_current()->running_file = new_file;
 	file_deny_write(thread_current()->running_file);
 
