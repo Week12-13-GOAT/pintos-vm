@@ -257,6 +257,9 @@ int process_exec(void *f_name)
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
 	/* 현재 컨텍스트를 제거합니다. */
+	struct file *new_file = filesys_open(cp_file_name);
+	if (new_file == NULL)
+		return -1;
 	process_cleanup();
 
 	supplemental_page_table_init(&thread_current()->spt);
@@ -268,7 +271,7 @@ int process_exec(void *f_name)
 	palloc_free_page(file_name);
 	if (!success)
 		return -1;
-	thread_current()->running_file = filesys_open(cp_file_name);
+	thread_current()->running_file = new_file;
 	file_deny_write(thread_current()->running_file);
 
 	// hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)_if.rsp, true);
@@ -778,15 +781,15 @@ lazy_load_segment(struct page *page, void *aux)
 	/* TODO: 이 함수를 호출할 때 VA는 사용할 수 있습니다. */
 	// kva는 page 안에 이미 있다
 	// 타입별로 다른 초기화 작업을 거쳐야하나?
-	struct lazy_load_info *lazy_info = (struct lazy_load_info *) aux;
+	struct lazy_load_info *lazy_info = (struct lazy_load_info *)aux;
 	struct file *read_file = lazy_info->file;
 
-	if(file_read_at(read_file, 
-					page->frame->kva, 
-					lazy_info->readbyte, 
-					lazy_info->offset) 
-					!= (int) lazy_info->readbyte) {
-					return false;
+	if (file_read_at(read_file,
+					 page->frame->kva,
+					 lazy_info->readbyte,
+					 lazy_info->offset) != (int)lazy_info->readbyte)
+	{
+		return false;
 	}
 	memset(page->frame->kva + lazy_info->readbyte, 0, lazy_info->zerobyte);
 
@@ -825,7 +828,8 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
 		struct lazy_load_info *aux = malloc(sizeof(struct lazy_load_info)); // 전달해야할 인자
-		if(aux == NULL) return false;
+		if (aux == NULL)
+			return false;
 
 		aux->file = file;
 		aux->offset = ofs;
@@ -848,15 +852,19 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack(struct intr_frame *if_)
 {
-	bool success = false;
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 
 	/* TODO: stack_bottom 위치에 스택을 매핑하고 즉시 페이지를 확보하세요.
 	 * TODO: 성공했다면 rsp 값을 적절히 설정하세요.
 	 * TODO: 해당 페이지가 스택임을 표시해야 합니다. */
 	/* TODO: Your code goes here */
-	// vm_do_claim_page(stack_bottom);
+	if (!vm_alloc_page(VM_ANON, stack_bottom, true))
+		return false;
+	if (!vm_claim_page(stack_bottom))
+		return false;
 
-	return success;
+	if_->rsp = USER_STACK;
+
+	return true;
 }
 #endif /* VM */
