@@ -217,7 +217,10 @@ vm_evict_frame(void)
 static struct frame *
 vm_get_frame(void)
 {
-	struct frame *frame = palloc_get_page(PAL_USER | PAL_ZERO);
+	/* 반드시 free해라 뒤지기싫으면.. */
+	struct frame *frame = malloc(sizeof(frame));
+	frame->kva = palloc_get_page(PAL_USER | PAL_ZERO);
+	frame_table_insert(&frame->elem);
 	/* TODO: Fill this function. */
 	/**
 	 * 여기서 swap_out을 진행해야 합니다
@@ -278,9 +281,11 @@ void vm_dealloc_page(struct page *page)
 /* VA에 할당된 페이지를 요구합니다 . */
 bool vm_claim_page(void *va UNUSED)
 {
-	struct page *page = NULL; // 스택 첫번째페이지
+	struct page *page = spt_find_page(&thread_current()->spt, va); // 스택 첫번째페이지
 	/* TODO: Fill this function */
-	page->va = va;
+	if (page == NULL)
+		return false;
+	// page->va = va;
 
 	return vm_do_claim_page(page);
 }
