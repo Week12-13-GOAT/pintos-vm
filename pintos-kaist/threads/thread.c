@@ -85,7 +85,7 @@ static uint64_t gdt[3] = {0,
 
 fixed_t load_avg = 0;
 
-//vm용 프레임 테이블
+// vm용 프레임 테이블
 struct list frame_table;
 
 /* Initializes the threading system by transforming the code
@@ -439,11 +439,8 @@ void thread_exit(void)
    may be scheduled again immediately at the scheduler's whim. */
 void thread_yield(void)
 {
-	// dprintf("thread_yield\n");
 	struct thread *curr = thread_current();
 	enum intr_level old_level;
-	// dprintf("현재 실행 쓰레드 : %s\n", thread_name());
-	// dprintf("현재 레디 리스트 사이즈 : %d\n", list_size(&ready_list));
 
 	ASSERT(!intr_context());
 

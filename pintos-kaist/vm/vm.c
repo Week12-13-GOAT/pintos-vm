@@ -114,7 +114,7 @@ spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 	// 더미 SPT_entry를 생성하여 va 값 기반 hash 조회
 	struct page *finding_page = NULL;
 	struct SPT_entry lookup;
-	lookup.va = va;
+	lookup.va = pg_round_down(va);
 
 	// 인자는 더미 SPT_entry, 반환된 finding_hash_elem은 실제 SPT_entry 소속 hash_elem
 	struct hash_elem *finding_hash_elem = hash_find(&spt->SPT_hash_list, &lookup.elem);
@@ -220,6 +220,7 @@ vm_get_frame(void)
 	/* 반드시 free해라 뒤지기싫으면.. */
 	struct frame *frame = malloc(sizeof(frame));
 	frame->kva = palloc_get_page(PAL_USER | PAL_ZERO);
+	frame->page = NULL;
 	frame_table_insert(&frame->elem);
 	/* TODO: Fill this function. */
 	/**
@@ -253,6 +254,8 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 {
 	struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
 	struct page *page = spt_find_page(spt, addr);
+	if (page == NULL)
+		return false; // 찐 폴트
 	/* TODO: Validate the fault */
 	/* bogus 폴트인지? 스택확장 폴트인지?
 	 * SPT 뒤져서 존재하면 bogus 폴트!!
