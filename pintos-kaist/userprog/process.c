@@ -245,7 +245,19 @@ int process_exec(void *f_name)
 {
 	char *file_name = f_name;
 	char cp_file_name[MAX_BUF];
+	char first_word[MAX_BUF];
 	memcpy(cp_file_name, file_name, strlen(file_name) + 1);
+
+	int i = 0;
+
+	// 공백 또는 널 문자가 나올 때까지 복사
+	while (cp_file_name[i] != '\0' && cp_file_name[i] != ' ' && i < MAX_BUF - 1)
+	{
+		first_word[i] = cp_file_name[i];
+		i++;
+	}
+	first_word[i] = '\0';
+
 	bool success;
 
 	/* intr_frame을 thread 구조체 안의 것을 사용할 수 없습니다.
@@ -257,7 +269,7 @@ int process_exec(void *f_name)
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
 	/* 현재 컨텍스트를 제거합니다. */
-	struct file *new_file = filesys_open(cp_file_name);
+	struct file *new_file = filesys_open(first_word);
 	if (new_file == NULL)
 		return -1;
 	process_cleanup();
