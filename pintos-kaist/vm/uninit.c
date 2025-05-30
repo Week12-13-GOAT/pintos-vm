@@ -65,5 +65,4 @@ uninit_destroy(struct page *page)
 	/* TODO: 이 함수를 구현하세요.
 	 * TODO: 특별히 할 일이 없다면 그냥 return 하세요. */
 	free(uninit->aux);
-	return;
 }
