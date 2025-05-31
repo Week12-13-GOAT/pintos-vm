@@ -127,6 +127,9 @@ struct thread
 	int stdin_count;
 	int stdout_count;
 
+	/* 유저스택 rsp */
+	void *user_rsp;
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4; /* Page map level 4 */
