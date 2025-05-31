@@ -375,7 +375,9 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 			return false; // 할당 실패!
 		}
 		/* 가상 페이지 복사 이후 물리 프레임 명시적 할당 */
-		vm_claim_page(src_entry->page->va);
+		/* 전부다 하지말고, parent의 page->frame이 null이 아닌 얘들만 해줘야할듯 */
+		if (src_entry->page->frame != NULL)
+			vm_claim_page(src_entry->page->va);
 	}
 
 	return true; // 모든 페이지 복사 성공
