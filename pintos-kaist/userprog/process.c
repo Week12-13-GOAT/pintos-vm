@@ -798,10 +798,9 @@ lazy_load_segment(struct page *page, void *aux)
 	struct lazy_load_info *lazy_info = (struct lazy_load_info *)aux;
 	struct file *read_file = lazy_info->file;
 
-	if (file_read_at(read_file,
-					 page->frame->kva,
-					 lazy_info->readbyte,
-					 lazy_info->offset) != (int)lazy_info->readbyte)
+	off_t my_read_byte = file_read_at(read_file, page->frame->kva, lazy_info->readbyte, lazy_info->offset);
+
+	if (my_read_byte != (off_t)lazy_info->readbyte)
 	{
 		return false;
 	}
@@ -845,7 +844,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		if (aux == NULL)
 			return false;
 
-		aux->file = file;
+		aux->file = file_reopen(file);
 		aux->offset = ofs;
 		aux->readbyte = page_read_bytes;
 		aux->zerobyte = page_zero_bytes;

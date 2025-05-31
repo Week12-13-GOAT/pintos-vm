@@ -117,16 +117,16 @@ kill(struct intr_frame *f)
 	}
 }
 
-/* 페이지 폴트 핸들러.  
-   이 코드는 가상 메모리 구현을 위해 반드시 채워야 하는 뼈대(skeleton)입니다.  
+/* 페이지 폴트 핸들러.
+   이 코드는 가상 메모리 구현을 위해 반드시 채워야 하는 뼈대(skeleton)입니다.
    프로젝트 2의 일부 솔루션에서도 이 코드를 수정해야 할 수 있습니다.
 
-   진입 시, 폴트가 발생한 주소는 CR2(컨트롤 레지스터 2)에 저장되어 있고,  
-   폴트에 대한 정보는 exception.h의 PF_* 매크로에 설명된 포맷으로  
-   F의 error_code 멤버에 들어 있습니다.  
-   아래 예제 코드는 이 정보를 어떻게 파싱하는지 보여줍니다.  
-   이에 대한 더 자세한 정보는  
-   [IA32-v3a] 5.15절 "Exception and Interrupt Reference"의  
+   진입 시, 폴트가 발생한 주소는 CR2(컨트롤 레지스터 2)에 저장되어 있고,
+   폴트에 대한 정보는 exception.h의 PF_* 매크로에 설명된 포맷으로
+   F의 error_code 멤버에 들어 있습니다.
+   아래 예제 코드는 이 정보를 어떻게 파싱하는지 보여줍니다.
+   이에 대한 더 자세한 정보는
+   [IA32-v3a] 5.15절 "Exception and Interrupt Reference"의
    "Interrupt 14--Page Fault Exception (#PF)" 설명에서 찾을 수 있습니다.
 */
 
@@ -152,6 +152,14 @@ page_fault(struct intr_frame *f)
 	not_present = (f->error_code & PF_P) == 0;
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
+
+	if (!user && fault_addr == 0x0)
+	{
+		printf("PANIC: Kernel attempted to read from NULL pointer (0x0)!\n");
+		printf("Instruction pointer (RIP): %p\n", f->rip);
+		intr_dump_frame(f); // 현재 인터럽트 프레임 상태 출력
+		PANIC("Null pointer dereference in kernel mode");
+	}
 
 #ifdef VM
 	/* For project 3 and later. */

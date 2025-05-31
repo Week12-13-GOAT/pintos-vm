@@ -218,7 +218,7 @@ static struct frame *
 vm_get_frame(void)
 {
 	/* 반드시 free해라 뒤지기싫으면.. */
-	struct frame *frame = malloc(sizeof(frame));
+	struct frame *frame = malloc(sizeof(struct frame));
 	frame->kva = palloc_get_page(PAL_USER | PAL_ZERO);
 	frame->page = NULL;
 	frame_table_insert(&frame->elem);
@@ -256,6 +256,9 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = spt_find_page(spt, addr);
 	if (page == NULL)
 		return false; // 찐 폴트
+
+	ASSERT(page->operations != NULL && page->operations->swap_in != NULL);
+
 	/* TODO: Validate the fault */
 	/* bogus 폴트인지? 스택확장 폴트인지?
 	 * SPT 뒤져서 존재하면 bogus 폴트!!
@@ -297,6 +300,7 @@ bool vm_claim_page(void *va UNUSED)
 static bool
 vm_do_claim_page(struct page *page)
 {
+	void *temp = page->operations->swap_in;
 	struct frame *frame = vm_get_frame();
 	/** TODO: vm_get_frame이 실패하면 swap_out
 	 */
