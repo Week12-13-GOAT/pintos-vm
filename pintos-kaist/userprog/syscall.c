@@ -29,7 +29,8 @@ int sys_read(int fd, void *buffer, unsigned size);
 int find_unused_fd(const char *file);
 void sys_seek(int fd, unsigned position);
 unsigned sys_tell(int fd);
-void check_buffer(const void *buffer, unsigned size, bool writeable);
+void check_buffer(const void *buffer, unsigned size);
+void check_read_buffer(const void *buffer, unsigned size);
 int sys_wait(tid_t pid);
 int sys_dup2(int oldfd, int newfd);
 void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset);
@@ -152,8 +153,13 @@ void check_address(const uint64_t *addr)
 }
 
 // writeable 관련 오류가 뜰... sudo?
-void check_buffer(const void *buffer, unsigned size, bool writeable)
-{
+void check_buffer(const void *buffer, unsigned size)
+{	
+	// 예외 처리
+	if (buffer == NULL) {
+		sys_exit(-1);
+	}
+
 	uint8_t *start = (uint8_t *)pg_round_down(buffer);
 	uint8_t *end = (uint8_t *)pg_round_down(buffer + size - 1);
 	struct thread *cur = thread_current();
@@ -165,13 +171,54 @@ void check_buffer(const void *buffer, unsigned size, bool writeable)
 			sys_exit(-1);
 		}
 
-		if (pml4_get_page(cur->pml4, addr) == NULL){
-			if (vm_try_handle_fault(NULL, addr, true, writeable, true) == false)
+		// if (pml4_get_page(cur->pml4, addr) == NULL){
+		// 	if (vm_try_handle_fault(NULL, addr, true, writeable, true) == false)
+		// 		sys_exit(-1);
+		// }
+		// else{
+		// 	if(writeable && !is_writable(pml4e_walk(cur->pml4, (uint64_t)addr, 0)))
+		// 		sys_exit(-1);
+		// }
+
+		if (pml4_get_page(cur->pml4, addr) == NULL) {
+			if (!vm_try_handle_fault(NULL, addr, true, false, true))
 				sys_exit(-1);
 		}
-		else{
-			if(writeable && !is_writable(pml4e_walk(cur->pml4, (uint64_t)addr, 0)))
+	}
+}
+
+void check_read_buffer(const void *buffer, unsigned size) {
+	if (is_user_vaddr(buffer) == false || is_user_vaddr(buffer + size -1) == false) {
+		sys_exit(-1);
+	}
+	check_buffer(buffer, size);
+}
+
+void check_write_buffer(const void *buffer, unsigned size) {
+	if (is_user_vaddr(buffer) == false || is_user_vaddr(buffer + size -1) == false) {
+		sys_exit(-1);
+	}
+	check_buffer(buffer, size);
+
+	uint8_t *start = (uint8_t *)pg_round_down(buffer);
+	uint8_t *end = (uint8_t *)pg_round_down(buffer + size - 1);
+	struct thread *cur = thread_current();
+
+	for (uint8_t *addr = start; addr <= end; addr += PGSIZE) {
+		if (!is_user_vaddr(addr))
+			sys_exit(-1);
+
+		void *page = pml4_get_page(cur->pml4, addr);
+		if (page == NULL) {
+			// 여기서는 writeable=true로 fault 처리 시도
+			if (!vm_try_handle_fault(NULL, addr, true, true, true))
 				sys_exit(-1);
+		} else {
+			// 이미 매핑되어 있다면 write 권한 확인
+			uint64_t *pte = pml4e_walk(cur->pml4, (uint64_t)addr, false);
+			if (pte == NULL || !is_writable(pte)) {
+				sys_exit(-1); // 쓰기 권한이 없으면 종료
+			}
 		}
 	}
 }
@@ -259,7 +306,7 @@ void sys_halt()
 
 static int sys_write(int fd, const void *buffer, unsigned size)
 {
-	check_buffer(buffer, size, false);
+	check_read_buffer(buffer, size);
 	// fd가 유효한지 먼저 검사
 	if (fd < 0 || fd >= MAX_FD)
 		return -1;
@@ -333,7 +380,7 @@ int sys_read(int fd, void *buffer, unsigned size)
 	if (size == 0)
 		return 0;
 
-	check_buffer(buffer, size, true); // 페이지 단위 검사
+	check_write_buffer(buffer, size); // 페이지 단위 검사
 
 	struct thread *cur = thread_current();
 
