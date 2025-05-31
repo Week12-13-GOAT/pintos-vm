@@ -160,15 +160,17 @@ void check_buffer(const void *buffer, unsigned size, bool writeable)
 
 	for (uint8_t *addr = start; addr <= end; addr += PGSIZE)
 	{
-		if (!is_user_vaddr(addr))
-		{
+		if (!is_user_vaddr(addr)){
 			// printf("Invalid page address: %p\n", addr);
 			sys_exit(-1);
 		}
 
-		if (pml4_get_page(cur->pml4, addr) == NULL)
-		{
+		if (pml4_get_page(cur->pml4, addr) == NULL){
 			if (vm_try_handle_fault(NULL, addr, true, writeable, true) == false)
+				sys_exit(-1);
+		}
+		else{
+			if(writeable && !is_writable(pml4e_walk(cur->pml4, (uint64_t)addr, 0)))
 				sys_exit(-1);
 		}
 	}
@@ -257,7 +259,7 @@ void sys_halt()
 
 static int sys_write(int fd, const void *buffer, unsigned size)
 {
-	check_buffer(buffer, size, true);
+	check_buffer(buffer, size, false);
 	// fd가 유효한지 먼저 검사
 	if (fd < 0 || fd >= MAX_FD)
 		return -1;
@@ -331,7 +333,7 @@ int sys_read(int fd, void *buffer, unsigned size)
 	if (size == 0)
 		return 0;
 
-	check_buffer(buffer, size, false); // 페이지 단위 검사
+	check_buffer(buffer, size, true); // 페이지 단위 검사
 
 	struct thread *cur = thread_current();
 

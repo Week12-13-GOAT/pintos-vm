@@ -255,6 +255,7 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
 	addr = pg_round_down(addr);
 
+	
 	uintptr_t rsp = thread_current()->user_rsp; // 유저 스택의 rsp 가져오기
 
 	if ((uintptr_t)addr >= rsp - STACK_GROW_RANGE && addr < USER_STACK && addr >= USER_STACK - (1 << 20))
@@ -264,9 +265,15 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	}
 
 	struct page *page = spt_find_page(spt, addr);
-	if (page == NULL)
-		return false; // 찐 폴트
+	if (page == NULL){
+		return false;
+	}
+		 // 찐 폴트
 
+
+	if (write == true && !page->writable)
+		return false;
+	
 	ASSERT(page->operations != NULL && page->operations->swap_in != NULL);
 
 	/* TODO: Validate the fault */
