@@ -29,7 +29,7 @@ int sys_read(int fd, void *buffer, unsigned size);
 int find_unused_fd(const char *file);
 void sys_seek(int fd, unsigned position);
 unsigned sys_tell(int fd);
-void check_buffer(const void *buffer, unsigned size);
+void check_buffer(const void *buffer, unsigned size, bool writeable);
 int sys_wait(tid_t pid);
 int sys_dup2(int oldfd, int newfd);
 void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset);
@@ -147,7 +147,8 @@ void check_address(const uint64_t *addr)
 	}
 }
 
-void check_buffer(const void *buffer, unsigned size)
+//writeable 관련 오류가 뜰... sudo?
+void check_buffer(const void *buffer, unsigned size, bool writeable)
 {
 	uint8_t *start = (uint8_t *)pg_round_down(buffer);
 	uint8_t *end = (uint8_t *)pg_round_down(buffer + size - 1);
@@ -155,10 +156,15 @@ void check_buffer(const void *buffer, unsigned size)
 
 	for (uint8_t *addr = start; addr <= end; addr += PGSIZE)
 	{
-		if (!is_user_vaddr(addr) || pml4_get_page(cur->pml4, addr) == NULL)
+		if (!is_user_vaddr(addr))
 		{
 			// printf("Invalid page address: %p\n", addr);
 			sys_exit(-1);
+		}
+		
+		if (pml4_get_page(cur->pml4, addr) == NULL){
+			if(vm_try_handle_fault(NULL, addr, true, writeable, true) == false)
+				sys_exit(-1);
 		}
 	}
 }
@@ -246,7 +252,7 @@ void sys_halt()
 
 static int sys_write(int fd, const void *buffer, unsigned size)
 {
-	check_buffer(buffer, size);
+	check_buffer(buffer, size, true);
 	// fd가 유효한지 먼저 검사
 	if (fd < 0 || fd >= MAX_FD)
 		return -1;
@@ -320,7 +326,7 @@ int sys_read(int fd, void *buffer, unsigned size)
 	if (size == 0)
 		return 0;
 
-	check_buffer(buffer, size); // 페이지 단위 검사
+	check_buffer(buffer, size, false); // 페이지 단위 검사
 
 	struct thread *cur = thread_current();
 
