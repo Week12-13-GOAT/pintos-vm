@@ -67,8 +67,6 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 			goto err;
 		}
 
-		page->writable = writable;
-
 		switch (VM_TYPE(type))
 		{
 		case VM_ANON:
@@ -87,6 +85,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		}
 
 		uninit_new(page, upage, init, type, aux, page_initializer);
+		page->writable = writable;
 
 		/* TODO: 생성한 페이지를 spt에 삽입하세요. */
 		if (!spt_insert_page(spt, page))
@@ -310,7 +309,8 @@ vm_do_claim_page(struct page *page)
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-	pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable);
+	if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))
+		return false;
 
 	return swap_in(page, frame->kva);
 }
