@@ -58,6 +58,11 @@ bool anon_initializer(struct page *page, enum vm_type type, void *kva)
 	/* swap index 초기화 */
 	anon_page->swap_idx = -1;
 
+	/* 물리 주소 초기화 */
+	if (kva != NULL) {
+		memset(kva, 0, PGSIZE);
+	}
+
 	return true;
 }
 
