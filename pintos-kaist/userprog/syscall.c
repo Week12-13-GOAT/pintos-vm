@@ -70,6 +70,9 @@ void syscall_init(void)
 /* The main system call interface */
 void syscall_handler(struct intr_frame *f UNUSED)
 {
+	/* 커널 내에서의 페이지 폴트 시 rsp가 망가지는 것을 대비 */
+	thread_current()->user_rsp = f->rsp;
+
 	uint64_t syscall_num = f->R.rax;
 	uint64_t arg1 = f->R.rdi;
 	uint64_t arg2 = f->R.rsi;
