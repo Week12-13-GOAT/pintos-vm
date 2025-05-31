@@ -153,13 +153,8 @@ page_fault(struct intr_frame *f)
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
 
-	if (!user && fault_addr == 0x0)
-	{
-		printf("PANIC: Kernel attempted to read from NULL pointer (0x0)!\n");
-		printf("Instruction pointer (RIP): %p\n", f->rip);
-		intr_dump_frame(f); // 현재 인터럽트 프레임 상태 출력
-		PANIC("Null pointer dereference in kernel mode");
-	}
+	dprintf("[Page Fault] addr=%p, RIP=%p, user=%d, write=%d, not_present=%d\n",
+			fault_addr, f->rip, user, write, not_present);
 
 #ifdef VM
 	/* For project 3 and later. */
