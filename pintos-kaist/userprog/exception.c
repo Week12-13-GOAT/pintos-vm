@@ -133,6 +133,8 @@ kill(struct intr_frame *f)
 static void
 page_fault(struct intr_frame *f)
 {
+	if (f->cs == SEL_UCSEG)
+		thread_current()->user_rsp = f->rsp;
 	bool not_present; /* True: not-present page, false: writing r/o page. */
 	bool write;		  /* True: access was write, false: access was read. */
 	bool user;		  /* True: access by user, false: access by kernel. */
@@ -155,6 +157,7 @@ page_fault(struct intr_frame *f)
 
 	dprintf("[Page Fault] addr=%p, RIP=%p, user=%d, write=%d, not_present=%d\n",
 			fault_addr, f->rip, user, write, not_present);
+	dprintf("Caller: %p\n", __builtin_return_address(0));
 
 #ifdef VM
 	/* For project 3 and later. */

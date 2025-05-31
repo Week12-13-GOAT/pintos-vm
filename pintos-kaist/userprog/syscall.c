@@ -70,6 +70,10 @@ void syscall_init(void)
 /* The main system call interface */
 void syscall_handler(struct intr_frame *f UNUSED)
 {
+	/* 커널 내에서의 페이지 폴트 시 rsp가 망가지는 것을 대비 */
+	if (f->cs == SEL_UCSEG)
+		thread_current()->user_rsp = f->rsp;
+
 	uint64_t syscall_num = f->R.rax;
 	uint64_t arg1 = f->R.rdi;
 	uint64_t arg2 = f->R.rsi;
@@ -147,7 +151,7 @@ void check_address(const uint64_t *addr)
 	}
 }
 
-//writeable 관련 오류가 뜰... sudo?
+// writeable 관련 오류가 뜰... sudo?
 void check_buffer(const void *buffer, unsigned size, bool writeable)
 {
 	uint8_t *start = (uint8_t *)pg_round_down(buffer);
@@ -161,9 +165,10 @@ void check_buffer(const void *buffer, unsigned size, bool writeable)
 			// printf("Invalid page address: %p\n", addr);
 			sys_exit(-1);
 		}
-		
-		if (pml4_get_page(cur->pml4, addr) == NULL){
-			if(vm_try_handle_fault(NULL, addr, true, writeable, true) == false)
+
+		if (pml4_get_page(cur->pml4, addr) == NULL)
+		{
+			if (vm_try_handle_fault(NULL, addr, true, writeable, true) == false)
 				sys_exit(-1);
 		}
 	}

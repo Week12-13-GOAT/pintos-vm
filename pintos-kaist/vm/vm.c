@@ -239,6 +239,7 @@ vm_stack_growth(void *addr UNUSED)
 	/* 스택 최하단에 익명 페이지를 추가하여 사용
 	 * addr은 PGSIZE로 내림(정렬)하여 사용	 */
 	vm_alloc_page(VM_ANON, addr, true); // 스택 최하단에 익명 페이지 추가
+	vm_claim_page(addr);
 }
 
 /* Handle the fault on write_protected page */
@@ -252,6 +253,16 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 						 bool user UNUSED, bool write UNUSED, bool not_present UNUSED)
 {
 	struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
+	addr = pg_round_down(addr);
+
+	uintptr_t rsp = thread_current()->user_rsp; // 유저 스택의 rsp 가져오기
+
+	if ((uintptr_t)addr >= rsp - STACK_GROW_RANGE && addr < USER_STACK && addr >= USER_STACK - (1 << 20))
+	{
+		vm_stack_growth(addr);
+		return true;
+	}
+
 	struct page *page = spt_find_page(spt, addr);
 	if (page == NULL)
 		return false; // 찐 폴트
