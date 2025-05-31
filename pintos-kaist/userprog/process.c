@@ -797,7 +797,7 @@ lazy_load_segment(struct page *page, void *aux)
 	// 타입별로 다른 초기화 작업을 거쳐야하나?
 	struct lazy_load_info *lazy_info = (struct lazy_load_info *)aux;
 	struct file *read_file = lazy_info->file;
-
+	
 	off_t my_read_byte = file_read_at(read_file, page->frame->kva, lazy_info->readbyte, lazy_info->offset);
 
 	if (my_read_byte != (off_t)lazy_info->readbyte)
@@ -856,6 +856,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
+		ofs += page_read_bytes;
 		upage += PGSIZE;
 	}
 	return true;
