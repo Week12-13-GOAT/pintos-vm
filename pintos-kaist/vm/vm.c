@@ -255,15 +255,13 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
 	addr = pg_round_down(addr);
 
-	// uintptr_t rsp = f->rsp;				  // 스택 확장 폴트를 확인하기 위함
-	// if (f->cs == SEL_KCSEG)				  // 만약 커널 모드의 폴트이면
-	// 	rsp = thread_current()->user_rsp; // 유저 스택의 rsp 가져오기
+	uintptr_t rsp = thread_current()->user_rsp; // 유저 스택의 rsp 가져오기
 
-	// if ((uintptr_t)addr >= rsp - 32 && addr < USER_STACK && addr >= USER_STACK - (1 << 20))
-	// {
-	// 	vm_stack_growth(addr);
-	// 	return true;
-	// }
+	if ((uintptr_t)addr >= rsp - STACK_GROW_RANGE && addr < USER_STACK && addr >= USER_STACK - (1 << 20))
+	{
+		vm_stack_growth(addr);
+		return true;
+	}
 
 	struct page *page = spt_find_page(spt, addr);
 	if (page == NULL)

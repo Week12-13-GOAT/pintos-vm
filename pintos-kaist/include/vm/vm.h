@@ -39,6 +39,7 @@ struct page_operations;
 struct thread;
 
 #define VM_TYPE(type) ((type) & 7)
+#define STACK_GROW_RANGE 4192
 
 /* "page"의 표현입니다.
  * 이것은 일종의 "부모 클래스"로, 네 개의 "자식 클래스"를 가집니다:
@@ -73,7 +74,7 @@ struct frame
 {
 	void *kva;
 	struct page *page;
-	//frame_table 소속 elem
+	// frame_table 소속 elem
 	struct list_elem elem;
 };
 
@@ -113,7 +114,8 @@ struct SPT_entry
 	struct hash_elem elem;
 };
 
-struct lazy_load_info{
+struct lazy_load_info
+{
 	struct file *file;
 	off_t offset;
 	size_t readbyte;
