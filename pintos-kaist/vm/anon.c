@@ -133,4 +133,9 @@ static void
 anon_destroy(struct page *page)
 {
 	struct anon_page *anon_page = &page->anon;
+	if(anon_page->swap_idx < 0) {
+		return;
+	}
+
+	bitmap_reset(swap_table, anon_page->swap_idx);
 }
