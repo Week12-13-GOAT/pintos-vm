@@ -137,11 +137,11 @@ void *do_mmap(void *addr, size_t length, int writable,
 
 	while (remain_length > 0)
 	{
-		struct lazy_load_info *info = make_info(reopen_file, cur_offset, remain_length);
+		size_t allocate_length = remain_length > PGSIZE ? PGSIZE : remain_length;
+		struct lazy_load_info *info = make_info(reopen_file, cur_offset, allocate_length);
 		struct mmap_info *mmap_info = make_mmap_info(info, mapping_count);
 		void *aux = mmap_info;
 
-		size_t allocate_length = remain_length > PGSIZE ? PGSIZE : remain_length;
 		vm_alloc_page_with_initializer(VM_MMAP, addr, writable, lazy_load_segment, aux);
 		if (remain_length < PGSIZE)
 			break;
