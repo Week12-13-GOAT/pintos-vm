@@ -3,6 +3,7 @@
 #include "vm/vm.h"
 #include "userprog/process.h"
 #include "threads/vaddr.h"
+#include "threads/mmu.h"
 
 static bool file_backed_swap_in(struct page *page, void *kva);
 static bool file_backed_swap_out(struct page *page);
@@ -87,6 +88,10 @@ file_backed_destroy(struct page *page)
 	 * write back을 할 때는 aux에 저장된 파일 정보를 사용
 	 * file_write를 사용하면 될 것 같아요
 	 */
+	if (pml4_is_dirty(thread_current()->pml4, page->va))
+	{
+		file_write_at(file_page->file, page->frame->kva, file_page->read_byte, file_page->offset);
+	}
 }
 
 static struct lazy_load_info *make_info(

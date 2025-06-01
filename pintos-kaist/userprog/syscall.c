@@ -249,8 +249,11 @@ void sys_munmap(void *addr)
 
 void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 {
+	if (fd < 2)
+		return MAP_FAILED;
+
 	int filesize = sys_filesize(fd);
-	if (filesize == 0 || length == 0 || fd < 2)
+	if (filesize == 0 || length == 0)
 		return MAP_FAILED;
 
 	if ((uint64_t)addr == 0 || (uint64_t)addr % PGSIZE != 0)
