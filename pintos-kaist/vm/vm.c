@@ -319,7 +319,7 @@ vm_do_claim_page(struct page *page)
 {
 	void *temp = page->operations->swap_in;
 	struct frame *frame = vm_get_frame();
-	/** TODO: vm_get_frame이 실패하면 swap_out
+	/** TODO: vm_get_frame이 실패하면 swap_outs
 	 */
 
 	/* Set links */
