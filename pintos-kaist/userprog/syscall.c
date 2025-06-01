@@ -134,6 +134,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		f->R.rax = sys_mmap(arg1, arg2, arg3, arg4, arg5);
 		break;
 	case SYS_MUNMAP:
+		sys_munmap(arg1);
 		break;
 	default:
 		thread_exit();
