@@ -256,7 +256,7 @@ void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	if (filesize == 0 || length == 0)
 		return MAP_FAILED;
 
-	if ((uint64_t)addr == 0 || (uint64_t)addr % PGSIZE != 0)
+	if ((uint64_t)addr == 0 || (uint64_t)addr % PGSIZE != 0 || offset % PGSIZE != 0)
 		return MAP_FAILED;
 
 	struct file *target_file = thread_current()->fd_table[fd];
