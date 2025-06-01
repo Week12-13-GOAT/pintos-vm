@@ -243,6 +243,7 @@ void sys_munmap(void *addr)
 	 * 2. 물리 페이지에서도 제거
 	 * 3. 매핑 카운트나 page 구조체 내의 카운트를 사용해서 제거
 	 */
+	do_munmap(addr);
 }
 
 void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
@@ -267,19 +268,7 @@ void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 			return MAP_FAILED;
 	}
 
-	size_t remain_length = length;
-	void *cur_addr = addr;
-	off_t cur_offset = offset;
-	struct file *reopen_file = file_reopen(target_file);
-
-	while (remain_length > 0)
-	{
-		size_t allocate_length = remain_length > PGSIZE ? PGSIZE : remain_length;
-		do_mmap(cur_addr, allocate_length, writable, reopen_file, cur_offset);
-		remain_length -= PGSIZE;
-		cur_addr += PGSIZE;
-		cur_offset += PGSIZE;
-	}
+	do_mmap(addr, length, writable, target_file, offset);
 
 	return addr;
 }

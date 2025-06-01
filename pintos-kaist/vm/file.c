@@ -1,6 +1,7 @@
 /* file.c: Implementation of memory backed file object (mmaped object). */
 
 #include "vm/vm.h"
+#include "userprog/process.h"
 #include "threads/vaddr.h"
 
 static bool file_backed_swap_in(struct page *page, void *kva);
@@ -19,11 +20,8 @@ static const struct page_operations file_ops = {
 void vm_file_init(void)
 {
 	/* 전역 자료구조 초기화 */
-	/** TODO: mmap 리스트 초기화
-	 * mmap으로 만들어진 페이지를 리스트로 관리하면
-	 * munmmap 시에 더 빠르게 할 수 있을 듯 합니다
-	 *
-	 */
+	/* mmap_list 초기화 */
+	list_init(&thread_current()->mmap_list);
 }
 
 /* Initialize the file backed page */
@@ -31,12 +29,22 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
 {
 	/* Set up the handler */
 	page->operations = &file_ops;
+	struct mmap_info *mapping_info = (struct mmap_info *)page->uninit.aux;
+	struct lazy_load_info *info = (struct lazy_load_info *)mapping_info->info;
+
+	struct file *backup_file = info->file;
+	off_t backup_offset = info->offset;
+	size_t read_byte = info->readbyte;
+	size_t zero_byte = info->zerobyte;
+	int mapping_count = mapping_info->mapping_count;
 
 	struct file_page *file_page = &page->file;
-	/** TODO: file 백업 정보를 초기화
-	 * file_page에 어떤 정보가 있는지에 따라 다름
-	 * 타입도 변환?
-	 */
+	/* swap out을 대비해 저장 */
+	file_page->file = backup_file;
+	file_page->offset = backup_offset;
+	file_page->read_byte = read_byte;
+	file_page->zero_byte = zero_byte;
+	file_page->mapping_count = mapping_count;
 }
 
 /* 파일에서 내용을 읽어와 페이지를 스왑인합니다. */
@@ -79,27 +87,98 @@ file_backed_destroy(struct page *page)
 	 */
 }
 
+static struct lazy_load_info *make_info(
+	struct file *file, off_t offset, size_t read_byte)
+{
+	struct lazy_load_info *info = malloc(sizeof(struct lazy_load_info));
+	info->file = file;
+	info->offset = offset;
+	info->readbyte = read_byte;
+	info->zerobyte = PGSIZE - read_byte;
+	return info;
+}
+
+static struct mmap_info *make_mmap_info(struct lazy_load_info *info, int mapping_count)
+{
+	struct mmap_info *mmap_info = malloc(sizeof(struct mmap_info));
+	mmap_info->info = info;
+	mmap_info->mapping_count = mapping_count;
+	return mmap_info;
+}
+
 /* Do the mmap */
-void *
-do_mmap(void *addr, size_t length, int writable,
-		struct file *file, off_t offset)
+void *do_mmap(void *addr, size_t length, int writable,
+			  struct file *file, off_t offset)
 {
 	// aux에 넣어줄 정보
 	size_t zero_byte = PGSIZE - length;
 	/** TODO: AUX 만들기
-	 * file 포인터
-	 * file 오프셋
-	 * read byte = length
-	 * zero byte
-	 * mapping 카운트
+	 * mapping 카운트???
 	 */
-	void *aux = NULL;
 
-	// TODO: 지연 로딩 함수 포인터 집어넣기
-	vm_alloc_page_with_initializer(VM_MMAP, addr, writable, NULL, aux);
+	/* 지연 로딩과 스왑 시의 백업 정보 저장 */
+
+	size_t remain_length = length;
+	void *cur_addr = addr;
+	off_t cur_offset = offset;
+	struct file *reopen_file = file_reopen(file);
+	int mapping_count = 0;
+
+	while (remain_length > 0)
+	{
+		struct lazy_load_info *info = make_info(reopen_file, cur_offset, remain_length);
+		struct mmap_info *mmap_info = make_mmap_info(info, mapping_count);
+		void *aux = mmap_info;
+
+		size_t allocate_length = remain_length > PGSIZE ? PGSIZE : remain_length;
+		vm_alloc_page_with_initializer(VM_MMAP, addr, writable, lazy_load_segment, aux);
+		remain_length -= PGSIZE;
+		cur_addr += PGSIZE;
+		cur_offset += PGSIZE;
+		mapping_count++;
+	}
+}
+
+static bool is_my_mmap(void *addr, struct file *mmap_file, int mmap_count)
+{
+	struct supplemental_page_table *spt = &thread_current()->spt;
+	struct page *find_page = spt_find_page(spt, addr);
+	if (find_page == NULL)
+		return false;
+
+	struct file *find_file = find_page->file.file;
+	/* 파일이 NULL이거나 인자로 받은 파일과 다른가? */
+	/* NULL이거나 다르면 다른 페이지임 !! */
+	if (find_file == NULL || find_file != mmap_file)
+		return false;
+
+	/**같은 파일이어도 매핑 카운트가 맞지 않으면
+	 * 서로 다른 페이지임 !!
+	 */
+	if (find_page->file.mapping_count != mmap_count)
+		return false;
+
+	return true;
 }
 
 /* Do the munmap */
 void do_munmap(void *addr)
 {
+	struct supplemental_page_table *spt = &thread_current()->spt;
+	struct page *target_page = spt_find_page(spt, addr);
+	if (target_page == NULL)
+		return;
+
+	struct file_page *file_page = &target_page->file;
+	struct file *target_file = file_page->file;
+	int target_mmap_count = file_page->mapping_count;
+
+	addr += PGSIZE; // 다음 mmap_file 찾기
+	while (is_my_mmap(addr, target_file, ++target_mmap_count))
+	{
+		struct page *remove_page = spt_find_page(spt, addr);
+		spt_remove_page(spt, remove_page);
+		addr += PGSIZE;
+	}
+	spt_remove_page(spt, target_page);
 }
