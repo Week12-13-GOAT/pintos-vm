@@ -45,6 +45,8 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
 	file_page->read_byte = read_byte;
 	file_page->zero_byte = zero_byte;
 	file_page->mapping_count = mapping_count;
+
+	return true;
 }
 
 /* 파일에서 내용을 읽어와 페이지를 스왑인합니다. */
@@ -118,7 +120,11 @@ void *do_mmap(void *addr, size_t length, int writable,
 
 	/* 지연 로딩과 스왑 시의 백업 정보 저장 */
 
-	size_t remain_length = length;
+	off_t file_size = file_length(file);
+	off_t read_size = file_size - offset;
+	if (read_size < 0)
+		read_size = 0;
+	size_t remain_length = (size_t)read_size;
 	void *cur_addr = addr;
 	off_t cur_offset = offset;
 	struct file *reopen_file = file_reopen(file);
@@ -132,6 +138,8 @@ void *do_mmap(void *addr, size_t length, int writable,
 
 		size_t allocate_length = remain_length > PGSIZE ? PGSIZE : remain_length;
 		vm_alloc_page_with_initializer(VM_MMAP, addr, writable, lazy_load_segment, aux);
+		if (remain_length < PGSIZE)
+			break;
 		remain_length -= PGSIZE;
 		cur_addr += PGSIZE;
 		cur_offset += PGSIZE;
