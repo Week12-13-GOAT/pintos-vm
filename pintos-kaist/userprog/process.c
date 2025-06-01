@@ -787,8 +787,7 @@ install_page(void *upage, void *kpage, bool writable)
 /* 여기부터 코드는 project 3 이후 사용됩니다.
  * project 2만을 위해 함수를 구현하려면 위쪽 블록에서 구현하세요. */
 
-static bool
-lazy_load_segment(struct page *page, void *aux)
+bool lazy_load_segment(struct page *page, void *aux)
 {
 	/* TODO: Load the segment from the file */
 	/* TODO: 이 함수는 해당 VA(가상 주소)에서 첫 페이지 폴트가 발생할 때 호출됩니다. */
@@ -797,7 +796,7 @@ lazy_load_segment(struct page *page, void *aux)
 	// 타입별로 다른 초기화 작업을 거쳐야하나?
 	struct lazy_load_info *lazy_info = (struct lazy_load_info *)aux;
 	struct file *read_file = lazy_info->file;
-	
+
 	off_t my_read_byte = file_read_at(read_file, page->frame->kva, lazy_info->readbyte, lazy_info->offset);
 
 	if (my_read_byte != (off_t)lazy_info->readbyte)

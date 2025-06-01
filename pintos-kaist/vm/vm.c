@@ -73,8 +73,6 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 			page_initializer = anon_initializer;
 			break;
 		case VM_MMAP:
-			/* 매핑 카운트를 추가해두자
-			   mmap_list로 mmap 페이지를 관리할거면 필요 x */
 		case VM_FILE:
 			page_initializer = file_backed_initializer;
 			break;
@@ -255,7 +253,6 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
 	addr = pg_round_down(addr);
 
-	
 	uintptr_t rsp = thread_current()->user_rsp; // 유저 스택의 rsp 가져오기
 
 	if ((uintptr_t)addr >= rsp - STACK_GROW_RANGE && addr < USER_STACK && addr >= USER_STACK - (1 << 20))
@@ -265,15 +262,15 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	}
 
 	struct page *page = spt_find_page(spt, addr);
-	if (page == NULL){
+	if (page == NULL)
+	{
 		return false;
 	}
-		 // 찐 폴트
-
+	// 찐 폴트
 
 	if (write == true && !page->writable)
 		return false;
-	
+
 	ASSERT(page->operations != NULL && page->operations->swap_in != NULL);
 
 	/* TODO: Validate the fault */

@@ -154,9 +154,10 @@ void check_address(const uint64_t *addr)
 
 // writeable 관련 오류가 뜰... sudo?
 void check_buffer(const void *buffer, unsigned size)
-{	
+{
 	// 예외 처리
-	if (buffer == NULL) {
+	if (buffer == NULL)
+	{
 		sys_exit(-1);
 	}
 
@@ -166,7 +167,8 @@ void check_buffer(const void *buffer, unsigned size)
 
 	for (uint8_t *addr = start; addr <= end; addr += PGSIZE)
 	{
-		if (!is_user_vaddr(addr)){
+		if (!is_user_vaddr(addr))
+		{
 			// printf("Invalid page address: %p\n", addr);
 			sys_exit(-1);
 		}
@@ -180,22 +182,27 @@ void check_buffer(const void *buffer, unsigned size)
 		// 		sys_exit(-1);
 		// }
 
-		if (pml4_get_page(cur->pml4, addr) == NULL) {
+		if (pml4_get_page(cur->pml4, addr) == NULL)
+		{
 			if (!vm_try_handle_fault(NULL, addr, true, false, true))
 				sys_exit(-1);
 		}
 	}
 }
 
-void check_read_buffer(const void *buffer, unsigned size) {
-	if (is_user_vaddr(buffer) == false || is_user_vaddr(buffer + size -1) == false) {
+void check_read_buffer(const void *buffer, unsigned size)
+{
+	if (is_user_vaddr(buffer) == false || is_user_vaddr(buffer + size - 1) == false)
+	{
 		sys_exit(-1);
 	}
 	check_buffer(buffer, size);
 }
 
-void check_write_buffer(const void *buffer, unsigned size) {
-	if (is_user_vaddr(buffer) == false || is_user_vaddr(buffer + size -1) == false) {
+void check_write_buffer(const void *buffer, unsigned size)
+{
+	if (is_user_vaddr(buffer) == false || is_user_vaddr(buffer + size - 1) == false)
+	{
 		sys_exit(-1);
 	}
 	check_buffer(buffer, size);
@@ -204,19 +211,24 @@ void check_write_buffer(const void *buffer, unsigned size) {
 	uint8_t *end = (uint8_t *)pg_round_down(buffer + size - 1);
 	struct thread *cur = thread_current();
 
-	for (uint8_t *addr = start; addr <= end; addr += PGSIZE) {
+	for (uint8_t *addr = start; addr <= end; addr += PGSIZE)
+	{
 		if (!is_user_vaddr(addr))
 			sys_exit(-1);
 
 		void *page = pml4_get_page(cur->pml4, addr);
-		if (page == NULL) {
+		if (page == NULL)
+		{
 			// 여기서는 writeable=true로 fault 처리 시도
 			if (!vm_try_handle_fault(NULL, addr, true, true, true))
 				sys_exit(-1);
-		} else {
+		}
+		else
+		{
 			// 이미 매핑되어 있다면 write 권한 확인
 			uint64_t *pte = pml4e_walk(cur->pml4, (uint64_t)addr, false);
-			if (pte == NULL || !is_writable(pte)) {
+			if (pte == NULL || !is_writable(pte))
+			{
 				sys_exit(-1); // 쓰기 권한이 없으면 종료
 			}
 		}
@@ -236,16 +248,20 @@ void sys_munmap(void *addr)
 void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 {
 	int filesize = sys_filesize(fd);
-	if (filesize == 0 || length == 0 || fd == 0 || fd == 1)
+	if (filesize == 0 || length == 0 || fd < 2)
 		return MAP_FAILED;
 
 	if ((uint64_t)addr == 0 || (uint64_t)addr % PGSIZE != 0)
 		return MAP_FAILED;
 
-	void *start_page = addr;
-	void *end_page = addr + length;
+	struct file *target_file = thread_current()->fd_table[fd];
+	if (target_file == NULL)
+		return MAP_FAILED;
 
-	for (; end_page > start_page; start_page + PGSIZE)
+	void *start_page = addr;
+	void *end_page = pg_round_up(addr + length);
+
+	for (; end_page > start_page; start_page += PGSIZE)
 	{
 		if (spt_find_page(&thread_current()->spt, start_page) != NULL)
 			return MAP_FAILED;
@@ -254,11 +270,12 @@ void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	size_t remain_length = length;
 	void *cur_addr = addr;
 	off_t cur_offset = offset;
+	struct file *reopen_file = file_reopen(target_file);
 
 	while (remain_length > 0)
 	{
 		size_t allocate_length = remain_length > PGSIZE ? PGSIZE : remain_length;
-		do_mmap(cur_addr, allocate_length, writable, thread_current()->fd_table[fd], cur_offset);
+		do_mmap(cur_addr, allocate_length, writable, reopen_file, cur_offset);
 		remain_length -= PGSIZE;
 		cur_addr += PGSIZE;
 		cur_offset += PGSIZE;

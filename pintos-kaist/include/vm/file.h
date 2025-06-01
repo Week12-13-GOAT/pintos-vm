@@ -12,6 +12,10 @@ struct file_page
 	어차피 PTE의 dirty bit가 있는데  */
 
 	// file_backup 정보를 필드로 두어도 될듯함
+	struct file *file;
+	off_t offset;
+	size_t read_byte;
+	size_t zero_byte;
 };
 
 void vm_file_init(void);
