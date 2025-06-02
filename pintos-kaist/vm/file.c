@@ -148,7 +148,7 @@ file_backed_destroy(struct page *page)
 	pml4_clear_page(curr->pml4, page->va);
 }
 
-static struct lazy_load_info *make_info(
+struct lazy_load_info *make_info(
 	struct file *file, off_t offset, size_t read_byte)
 {
 	struct lazy_load_info *info = malloc(sizeof(struct lazy_load_info));
@@ -159,7 +159,7 @@ static struct lazy_load_info *make_info(
 	return info;
 }
 
-static struct mmap_info *make_mmap_info(struct lazy_load_info *info, int mapping_count)
+struct mmap_info *make_mmap_info(struct lazy_load_info *info, int mapping_count)
 {
 	struct mmap_info *mmap_info = malloc(sizeof(struct mmap_info));
 	mmap_info->info = info;
@@ -196,7 +196,7 @@ void *do_mmap(void *addr, size_t length, int writable,
 		struct mmap_info *mmap_info = make_mmap_info(info, mapping_count);
 		void *aux = mmap_info;
 
-		vm_alloc_page_with_initializer(VM_MMAP, addr, writable, lazy_load_segment, aux);
+		vm_alloc_page_with_initializer(VM_MMAP, cur_addr, writable, lazy_load_segment, aux);
 		if (remain_length < PGSIZE)
 			break;
 		remain_length -= PGSIZE;
