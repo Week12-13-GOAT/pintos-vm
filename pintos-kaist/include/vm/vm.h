@@ -160,3 +160,4 @@ struct lazy_load_info *make_info(
 	struct file *file, off_t offset, size_t read_byte);
 
 #endif /* VM_VM_H */
+
