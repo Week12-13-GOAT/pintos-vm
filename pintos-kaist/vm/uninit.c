@@ -47,8 +47,14 @@ uninit_initialize(struct page *page, void *kva)
 	struct uninit_page *uninit = &page->uninit;
 
 	/* 먼저 가져옵니다. page_initialize가 값을 덮어쓸 수 있습니다. */
-	vm_initializer *init = uninit->init;	
+	vm_initializer *init = uninit->init;
+
 	void *aux = uninit->aux;
+	if (uninit->type == VM_MMAP)
+	{
+		struct mmap_info *mmap_info = (struct mmap_info *)aux;
+		aux = mmap_info->info;
+	}
 
 	/* TODO: 이 함수를 수정해야 할 수도 있습니다. */
 	return uninit->page_initializer(page, uninit->type, kva) &&

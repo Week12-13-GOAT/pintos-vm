@@ -155,10 +155,6 @@ page_fault(struct intr_frame *f)
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
 
-	dprintf("[Page Fault] addr=%p, RIP=%p, user=%d, write=%d, not_present=%d\n",
-			fault_addr, f->rip, user, write, not_present);
-	dprintf("Caller: %p\n", __builtin_return_address(0));
-
 #ifdef VM
 	/* For project 3 and later. */
 	if (vm_try_handle_fault(f, fault_addr, user, write, not_present))
@@ -169,10 +165,10 @@ page_fault(struct intr_frame *f)
 	page_fault_cnt++;
 
 	/* If the fault is true fault, show info and exit. */
-	printf("Page fault at %p: %s error %s page in %s context.\n",
-		   fault_addr,
-		   not_present ? "not present" : "rights violation",
-		   write ? "writing" : "reading",
-		   user ? "user" : "kernel");
+	dprintf("Page fault at %p: %s error %s page in %s context.\n",
+			fault_addr,
+			not_present ? "not present" : "rights violation",
+			write ? "writing" : "reading",
+			user ? "user" : "kernel");
 	kill(f);
 }

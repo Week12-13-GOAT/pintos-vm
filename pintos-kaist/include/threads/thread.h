@@ -127,8 +127,11 @@ struct thread
 	int stdin_count;
 	int stdout_count;
 
-	/* 유저스택 rsp */
+	/* project3 stack growth 유저스택 rsp */
 	void *user_rsp;
+
+	/* project3 mmap */
+	struct list mmap_list;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

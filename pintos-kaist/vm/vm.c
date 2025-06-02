@@ -73,8 +73,6 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 			page_initializer = anon_initializer;
 			break;
 		case VM_MMAP:
-			/* 매핑 카운트를 추가해두자
-			   mmap_list로 mmap 페이지를 관리할거면 필요 x */
 		case VM_FILE:
 			page_initializer = file_backed_initializer;
 			break;
@@ -255,7 +253,6 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
 	addr = pg_round_down(addr);
 
-	
 	uintptr_t rsp = thread_current()->user_rsp; // 유저 스택의 rsp 가져오기
 
 	if ((uintptr_t)addr >= rsp - STACK_GROW_RANGE && addr < USER_STACK && addr >= USER_STACK - (1 << 20))
@@ -265,15 +262,15 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	}
 
 	struct page *page = spt_find_page(spt, addr);
-	if (page == NULL){
+	if (page == NULL)
+	{
 		return false;
 	}
-		 // 찐 폴트
-
+	// 찐 폴트
 
 	if (write == true && !page->writable)
 		return false;
-	
+
 	ASSERT(page->operations != NULL && page->operations->swap_in != NULL);
 
 	/* TODO: Validate the fault */
@@ -375,14 +372,16 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 	while (hash_next(&i))
 	{
 		struct SPT_entry *src_entry = hash_entry(hash_cur(&i), struct SPT_entry, elem);
-		if (!vm_alloc_page(page_get_type(src_entry), // 페이지 타입
-						   src_entry->page->va,		 // 가상 주소
+		if (!vm_alloc_page(page_get_type(src_entry->page), // 페이지 타입
+						   src_entry->page->va,			   // 가상 주소
 						   src_entry->page->writable))
 		{				  // 쓰기 권한
 			return false; // 할당 실패!
 		}
 		/* 가상 페이지 복사 이후 물리 프레임 명시적 할당 */
-		vm_claim_page(src_entry->page->va);
+		/* 전부다 하지말고, parent의 page->frame이 null이 아닌 얘들만 해줘야할듯 */
+		if (src_entry->page->frame != NULL)
+			vm_claim_page(src_entry->page->va);
 	}
 
 	return true; // 모든 페이지 복사 성공
