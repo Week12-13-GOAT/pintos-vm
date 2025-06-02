@@ -272,8 +272,7 @@ int process_exec(void *f_name)
 
 	struct file *new_file = filesys_open(first_word);
 	/* 현재 컨텍스트를 제거합니다. */
-	if (new_file == NULL)
-		return -1;
+
 	process_cleanup();
 
 	supplemental_page_table_init(&thread_current()->spt);
@@ -285,8 +284,11 @@ int process_exec(void *f_name)
 	palloc_free_page(file_name);
 	if (!success)
 		return -1;
-	/* 수정이 필요할 수도 있음 */
+	/* ======수정이 필요할 수도 있음=== */
+	if (new_file == NULL)
+		return -1;
 	thread_current()->running_file = new_file;
+	/* ==========여기까지 !!========== */
 	file_deny_write(thread_current()->running_file);
 
 	// hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)_if.rsp, true);
@@ -384,9 +386,10 @@ void process_exit(void)
 		file_close(curr->running_file);
 	}
 
+	dprintf("process_exit, 현재 쓰레드 : %s, hash size : %lu\n", curr->name, hash_size(&curr->spt.SPT_hash_list));
+	process_cleanup();
 	sema_up(&curr->wait_sema);
 	sema_down(&curr->free_sema);
-	process_cleanup();
 }
 
 /* 현재 프로세스의 자원을 해제합니다. */
@@ -396,6 +399,7 @@ process_cleanup(void)
 	struct thread *curr = thread_current();
 
 #ifdef VM
+	dprintf("process_cleanup, 현재 쓰레드 : %s, hash size : %lu\n", curr->name, hash_size(&curr->spt.SPT_hash_list));
 	supplemental_page_table_kill(&curr->spt);
 #endif
 
@@ -852,6 +856,8 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
 											writable, lazy_load_segment, aux))
 			return false;
+
+		dprintf("현재 쓰레드 : %s, 현재 hash size : %lu\n", thread_current()->name, hash_size(&thread_current()->spt.SPT_hash_list));
 
 		/* Advance. */
 		read_bytes -= page_read_bytes;

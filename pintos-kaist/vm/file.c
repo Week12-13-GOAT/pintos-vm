@@ -142,7 +142,7 @@ void *do_mmap(void *addr, size_t length, int writable,
 		struct mmap_info *mmap_info = make_mmap_info(info, mapping_count);
 		void *aux = mmap_info;
 
-		vm_alloc_page_with_initializer(VM_MMAP, addr, writable, lazy_load_segment, aux);
+		vm_alloc_page_with_initializer(VM_MMAP, cur_addr, writable, lazy_load_segment, aux);
 		if (remain_length < PGSIZE)
 			break;
 		remain_length -= PGSIZE;
