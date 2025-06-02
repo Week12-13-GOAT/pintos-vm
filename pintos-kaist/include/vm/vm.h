@@ -76,6 +76,7 @@ struct frame
 	struct page *page;
 	// frame_table 소속 elem
 	struct list_elem elem;
+	bool clock_check;
 };
 
 /* 페이지 작업을 위한 함수 테이블입니다.
@@ -152,5 +153,10 @@ enum vm_type page_get_type(struct page *page);
 
 void frame_table_insert(struct list_elem *elem);
 struct frame *frame_table_remove(void);
+
+struct mmap_info *make_mmap_info(struct lazy_load_info *info,
+								 int mapping_count);
+struct lazy_load_info *make_info(
+	struct file *file, off_t offset, size_t read_byte);
 
 #endif /* VM_VM_H */
