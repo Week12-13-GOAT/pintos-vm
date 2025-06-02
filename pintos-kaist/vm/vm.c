@@ -44,7 +44,7 @@ static uint64_t my_hash(const struct hash_elem *e, void *aux UNUSED);
 static bool my_less(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
 
 /* 초기화 함수와 함께 대기 중인 페이지 객체를 생성합니다. 페이지를 직접 생성하지 말고,
- * 반드시 이 함수나 `vm_alloc_page`를 통해 생성하세요. */
+ * 반드시 이 함수나 vm_alloc_page를 통해 생성하세요. */
 bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writable,
 									vm_initializer *init, void *aux)
 {
@@ -184,12 +184,37 @@ void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
 	return true;
 }
 
-/* Get the struct frame, that will be evicted. */
-static struct frame *
-vm_get_victim(void)
+static struct frame 
+*vm_get_victim(void)
 {
-	struct frame *victim = NULL;
+	struct list_elem *clock_now;
+	struct frame *victim = list_entry(list_begin(&frame_table), struct frame, elem);
 	/* TODO: 교체 정책을 여기서 구현해서 희생자 페이지 찾기 */
+	if (list_empty(&frame_table))
+		return NULL;
+
+	ASSERT(victim != NULL);
+	// if(clock_start == NULL || clock_start == list_end(&frame_table))
+	// 	clock_start = list_begin(&frame_table);
+
+	// clock_now = clock_start;
+	// do{
+	// 	victim = list_entry(clock_now,struct frame, elem);
+
+	// 	if(victim->clock_check == false){
+	// 		clock_start = list_next(clock_now);
+	// 		return victim;
+	// 	}
+
+	// 	victim->clock_check = false;
+
+	// 	clock_now = list_next(clock_now);
+	// 	if(clock_now == list_end(&frame_table))
+	// 		clock_now = list_begin(&frame_table);
+	// } while(clock_now != clock_start);
+
+	// victim = list_entry(clock_now,struct frame, elem);
+	// clock_start = list_next(clock_now);
 
 	return victim;
 }
@@ -199,14 +224,25 @@ vm_get_victim(void)
 static struct frame *
 vm_evict_frame(void)
 {
-	struct frame *victim UNUSED = vm_get_victim();
+	struct frame *victim = vm_get_victim();
+	if (victim == NULL)
+		return NULL;
 	/* TODO: swap out the victim and return the evicted frame. */
-
+	
+	
+	struct page *victim_page = victim->page;
+	if (victim_page == NULL)
+		return NULL;
 	/** TODO: 여기서 swap_out 매크로를 호출??
-	 *	pml4_clear_page를 아마 사용?? (잘 모름)
+	 *	pml4_clear_page를 아마 사용?? (잘 모름)                                                                                                                                         
 	 */
+	
+	if(!swap_out(victim_page))
+		return NULL;
+	pml4_clear_page(thread_current()->pml4, victim_page->va);
+	list_remove(&victim->elem);
 
-	return NULL;
+	return victim;
 }
 
 /* palloc()을 사용하여 프레임을 할당합니다.
@@ -218,7 +254,18 @@ vm_get_frame(void)
 {
 	/* 반드시 free해라 뒤지기싫으면.. */
 	struct frame *frame = malloc(sizeof(struct frame));
+	ASSERT(frame != NULL);
+
+
 	frame->kva = palloc_get_page(PAL_USER | PAL_ZERO);
+	if(frame->kva == NULL){
+		struct frame *victim1 = vm_evict_frame();
+		
+		ASSERT(victim1 !=NULL);
+
+		frame->kva = victim1->kva;  // victim의 물리 페이지를 재활용
+		free(victim1);
+	}
 	frame->page = NULL;
 	frame_table_insert(&frame->elem);
 	/* TODO: Fill this function. */
@@ -227,7 +274,7 @@ vm_get_frame(void)
 	 * pml4_clear_page를 사용해서 물리 주소를 클리어 합니다
 	 */
 
-	ASSERT(frame != NULL);
+	
 	ASSERT(frame->page == NULL);
 	return frame;
 }

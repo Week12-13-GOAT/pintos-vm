@@ -37,9 +37,7 @@ void vm_anon_init(void)
 	 * 스왑 테이블 엔트리에 이 엔트리가 비어있다는 비트 필요
 	 * bitmap 공부가 필요할듯
 	 */
-	disk_sector_t size = disk_size(swap_disk);
-	size_t sector_size = size / PGSIZE;
-	swap_table = bitmap_create(sector_size);
+	swap_table = bitmap_create(disk_size(swap_disk) /(PGSIZE / DISK_SECTOR_SIZE));
 }
 
 /* Initialize the file mapping */
@@ -114,6 +112,7 @@ anon_swap_out(struct page *page)
 	size_t swap_idx = bitmap_scan_and_flip(swap_table, 0, 1, false);
 	
 	if (swap_idx == BITMAP_ERROR) {
+		ASSERT(bitmap_test(swap_table, swap_idx) == false); 
 		return false;
 	}
 
@@ -121,7 +120,7 @@ anon_swap_out(struct page *page)
 		disk_write(swap_disk, (swap_idx * 8) + i, page->frame->kva + (DISK_SECTOR_SIZE * i));
 	}
 	
-	free(page->frame);
+	page->frame->page = NULL;
 	page->frame = NULL;
 	anon_page->swap_idx = swap_idx;
 

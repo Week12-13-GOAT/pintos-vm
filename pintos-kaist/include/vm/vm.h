@@ -76,6 +76,7 @@ struct frame
 	struct page *page;
 	// frame_table 소속 elem
 	struct list_elem elem;
+	bool clock_check;
 };
 
 /* 페이지 작업을 위한 함수 테이블입니다.
@@ -159,3 +160,4 @@ struct lazy_load_info *make_info(
 	struct file *file, off_t offset, size_t read_byte);
 
 #endif /* VM_VM_H */
+
