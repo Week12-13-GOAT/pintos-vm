@@ -165,7 +165,9 @@ void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
 	/* SPT_hash_list에서 해당 가상 주소를 가진 엔트리를 제거합니다 */
 	struct hash_elem *delete_elem = hash_delete(&spt->SPT_hash_list, &lookup.elem);
 	if (delete_elem == NULL)
+	{
 		return;
+	}
 	struct SPT_entry *deleted = hash_entry(delete_elem, struct SPT_entry, elem);
 
 	/* 페이지 테이블에서 해당 가상 페이지 삭제 */
@@ -354,10 +356,45 @@ static bool my_less(const struct hash_elem *a, const struct hash_elem *b, void *
 	return a_entry->va < b_entry->va;
 }
 
+static void *duplicate_aux(struct page *src_page)
+{
+	if (src_page->uninit.type == VM_MMAP)
+	{
+		struct mmap_info *src_mmap_info = (struct mmap_info *)src_page->uninit.aux;
+		struct lazy_load_info *src_info = (struct lazy_load_info *)src_mmap_info->info;
+
+		struct mmap_info *dst_mmap_info = malloc(sizeof(struct mmap_info));
+		struct lazy_load_info *dst_info = malloc(sizeof(struct lazy_load_info));
+
+		dst_info->file = file_reopen(src_info->file);
+		dst_info->offset = src_info->offset;
+		dst_info->readbyte = src_info->readbyte;
+		dst_info->zerobyte = src_info->zerobyte;
+
+		dst_mmap_info->mapping_count = src_mmap_info->mapping_count;
+		dst_mmap_info->info = dst_info;
+
+		return dst_mmap_info;
+	}
+	else
+	{
+		struct lazy_load_info *src_info = (struct lazy_load_info *)src_page->uninit.aux;
+		struct lazy_load_info *dst_info = malloc(sizeof(struct lazy_load_info));
+
+		dst_info->file = file_reopen(src_info->file);
+		dst_info->offset = src_info->offset;
+		dst_info->readbyte = src_info->readbyte;
+		dst_info->zerobyte = src_info->zerobyte;
+
+		return dst_info;
+	}
+}
+
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED, struct supplemental_page_table *src UNUSED)
 {
 	struct hash_iterator i;
 	hash_first(&i, &src->SPT_hash_list);
+	struct thread *cur = thread_current();
 
 	while (hash_next(&i))
 	{
@@ -372,7 +409,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED, st
 		if (type == VM_UNINIT)
 		{ // uninit page 생성 & 초기화
 			vm_initializer *init = src_page->uninit.init;
-			void *aux = src_page->uninit.aux;
+			void *aux = duplicate_aux(src_page);
 			vm_alloc_page_with_initializer(VM_ANON, upage, writable, init, aux);
 			continue;
 		}
@@ -399,8 +436,9 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 {
 	/* TODO: 스레드가 보유한 모든 supplemental_page_table을 제거하고,
 	 * TODO: 수정된 내용을 스토리지에 기록(writeback)하세요. */
-	struct thread *cur = thread_current();
-	hash_destroy(&spt->SPT_hash_list, hash_spt_entry_kill);
+	struct thread *curr = thread_current();
+	// hash_destroy(&spt->SPT_hash_list, hash_spt_entry_kill);
+	hash_clear(&curr->spt, hash_spt_entry_kill);
 }
 
 static void hash_spt_entry_kill(struct hash_elem *e, void *aux)
@@ -411,7 +449,10 @@ static void hash_spt_entry_kill(struct hash_elem *e, void *aux)
 	 * free(page)를 진행합니다.
 	 * 따라서 페이지의 타입에 따라 다른 destory 함수가 호출될 것으로 기대됩니다.
 	 */
-	spt_remove_page(&thread_current()->spt, entry->page);
+	struct thread *curr = thread_current();
+
+	vm_dealloc_page(entry->page);
+	free(entry);
 }
 
 void frame_table_insert(struct list_elem *elem)

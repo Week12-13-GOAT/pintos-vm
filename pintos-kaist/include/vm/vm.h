@@ -153,4 +153,9 @@ enum vm_type page_get_type(struct page *page);
 void frame_table_insert(struct list_elem *elem);
 struct frame *frame_table_remove(void);
 
+struct mmap_info *make_mmap_info(struct lazy_load_info *info,
+								 int mapping_count);
+struct lazy_load_info *make_info(
+	struct file *file, off_t offset, size_t read_byte);
+
 #endif /* VM_VM_H */
