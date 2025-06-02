@@ -372,8 +372,8 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 	while (hash_next(&i))
 	{
 		struct SPT_entry *src_entry = hash_entry(hash_cur(&i), struct SPT_entry, elem);
-		if (!vm_alloc_page(page_get_type(src_entry), // 페이지 타입
-						   src_entry->page->va,		 // 가상 주소
+		if (!vm_alloc_page(page_get_type(src_entry->page), // 페이지 타입
+						   src_entry->page->va,			   // 가상 주소
 						   src_entry->page->writable))
 		{				  // 쓰기 권한
 			return false; // 할당 실패!
