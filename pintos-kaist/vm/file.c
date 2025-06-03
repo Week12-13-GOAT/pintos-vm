@@ -107,15 +107,9 @@ file_backed_swap_out(struct page *page)
 		// 더티 비트 클리어
 		pml4_set_dirty(curr->pml4, page->va, false);
 	}
-
-	// 페이지 테이블 매핑 제거
-	pml4_clear_page(curr->pml4, page->va);
-
-	// 프레임 해제
-	if (page->frame != NULL) {
-		free(page->frame);
-		page->frame = NULL;
-	}
+	//초기화는 victim에서 
+	page->frame->page = NULL;
+	page->frame = NULL;
 
 	return true;
 }
