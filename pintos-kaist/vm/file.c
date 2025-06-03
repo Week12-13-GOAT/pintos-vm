@@ -125,14 +125,18 @@ file_backed_destroy(struct page *page)
 	 * file_write를 사용하면 될 것 같아요
 	 */
 	struct thread *curr = thread_current();
+	
+	file_allow_write(file_page->file);
+	
 	if (pml4_is_dirty(thread_current()->pml4, page->va))
 	{
 		lock_acquire(&filesys_lock);
-		file_write_at(file_page->file, page->frame->kva, file_page->read_byte, file_page->offset);
+		off_t written = file_write_at(file_page->file, page->frame->kva, file_page->read_byte, file_page->offset);
 		lock_release(&filesys_lock);
+		ASSERT(written == file_page->read_byte);
+		pml4_set_dirty(curr->pml4, page->va, false);
 	}
 
-	file_allow_write(file_page->file);
 	
 	if (page->frame != NULL) {
 		palloc_free_page(page->frame->kva);
