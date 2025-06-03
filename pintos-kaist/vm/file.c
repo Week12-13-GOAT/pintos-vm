@@ -133,8 +133,9 @@ file_backed_destroy(struct page *page)
 	}
 
 	file_allow_write(file_page->file);
-
+	
 	if (page->frame != NULL) {
+		palloc_free_page(page->frame->kva);
 		free(page->frame);
 		page->frame = NULL;
 	}
