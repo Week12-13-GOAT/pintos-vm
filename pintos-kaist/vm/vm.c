@@ -266,11 +266,6 @@ vm_get_frame(void)
    }
    frame->page = NULL;
    frame_table_insert(&frame->elem);
-   /* TODO: Fill this function. */
-   /**
-    * 여기서 swap_out을 진행해야 합니다
-    * pml4_clear_page를 사용해서 물리 주소를 클리어 합니다
-    */
 
    ASSERT(frame->page == NULL);
    return frame;
@@ -293,6 +288,15 @@ vm_handle_wp(struct page *page UNUSED)
 }
 
 /* Return true on success */
+/* bogus 폴트인지? 스택확장 폴트인지?
+ * SPT 뒤져서 존재하면 bogus 폴트!!
+ * addr이 유저 스택 시작 주소 + 1MB를 넘지 않으면 스택확장 폴트
+ * 찐폴트면 false 리턴
+ * 아니면 vm_do_claim_page 호출
+ * 스택확장 폴트에서 valid를 확인하려면 유저 스택 시작 주소 + 1MB를 넘는지 확인
+ * addr = thread 내의 user_rsp
+ * addr은 user_rsp보다 크면 안됨
+ * stack_growth 호출해야함 */
 bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
                          bool user UNUSED, bool write UNUSED, bool not_present UNUSED)
 {
@@ -319,20 +323,6 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 
    ASSERT(page->operations != NULL && page->operations->swap_in != NULL);
 
-   /* TODO: Validate the fault */
-   /* bogus 폴트인지? 스택확장 폴트인지?
-    * SPT 뒤져서 존재하면 bogus 폴트!!
-    * addr이 유저 스택 시작 주소 + 1MB를 넘지 않으면 스택확장 폴트
-    * 찐폴트면 false 리턴
-    * 아니면 vm_do_claim_page 호출   */
-
-   /* 스택확장 폴트에서 valid를 확인하려면 유저 스택 시작 주소 + 1MB를 넘는지 확인
-    * addr = thread 내의 user_rsp
-    * addr은 user_rsp보다 크면 안됨
-    * stack_growth 호출해야함 */
-
-   /* TODO: Your code goes here */
-
    return vm_do_claim_page(page);
 }
 
@@ -348,10 +338,8 @@ void vm_dealloc_page(struct page *page)
 bool vm_claim_page(void *va UNUSED)
 {
    struct page *page = spt_find_page(&thread_current()->spt, va); // 스택 첫번째페이지
-   /* TODO: Fill this function */
    if (page == NULL)
       return false;
-   // page->va = va;
 
    return vm_do_claim_page(page);
 }
@@ -362,8 +350,6 @@ vm_do_claim_page(struct page *page)
 {
    void *temp = page->operations->swap_in;
    struct frame *frame = vm_get_frame();
-   /** TODO: vm_get_frame이 실패하면 swap_out
-    */
 
    /* Set links */
    frame->page = page;
@@ -499,7 +485,6 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
    /* TODO: 스레드가 보유한 모든 supplemental_page_table을 제거하고,
     * TODO: 수정된 내용을 스토리지에 기록(writeback)하세요. */
    struct thread *curr = thread_current();
-   // hash_destroy(&spt->SPT_hash_list, hash_spt_entry_kill);
    hash_clear(&curr->spt, hash_spt_entry_kill);
 }
 

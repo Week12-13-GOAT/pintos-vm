@@ -71,7 +71,8 @@ file_backed_swap_in(struct page *page, void *kva)
 	size_t read_byte = file_page->read_byte;
 
 	// 파일에서 데이터 읽기
-	if (file_read_at(file, kva, read_byte, offset) != (off_t)read_byte) {
+	if (file_read_at(file, kva, read_byte, offset) != (off_t)read_byte)
+	{
 		return false;
 	}
 
@@ -95,19 +96,20 @@ file_backed_swap_out(struct page *page)
 	struct thread *curr = thread_current();
 	bool dirty_bit = pml4_is_dirty(curr->pml4, page->va);
 
-	if (dirty_bit == true) {
+	if (dirty_bit == true)
+	{
 		lock_acquire(&filesys_lock);
-		if (file_write_at(file_page->file, page->frame->kva, file_page->read_byte, file_page->offset)
-			!= (off_t)file_page->read_byte) {
-				lock_release(&filesys_lock);
-				return false;
+		if (file_write_at(file_page->file, page->frame->kva, file_page->read_byte, file_page->offset) != (off_t)file_page->read_byte)
+		{
+			lock_release(&filesys_lock);
+			return false;
 		}
 		lock_release(&filesys_lock);
 
 		// 더티 비트 클리어
 		pml4_set_dirty(curr->pml4, page->va, false);
 	}
-	//초기화는 victim에서 
+	// 초기화는 victim에서
 	page->frame->page = NULL;
 	page->frame = NULL;
 
@@ -125,9 +127,9 @@ file_backed_destroy(struct page *page)
 	 * file_write를 사용하면 될 것 같아요
 	 */
 	struct thread *curr = thread_current();
-	
+
 	file_allow_write(file_page->file);
-	
+
 	if (pml4_is_dirty(thread_current()->pml4, page->va))
 	{
 		lock_acquire(&filesys_lock);
@@ -137,8 +139,8 @@ file_backed_destroy(struct page *page)
 		pml4_set_dirty(curr->pml4, page->va, false);
 	}
 
-	
-	if (page->frame != NULL) {
+	if (page->frame != NULL)
+	{
 		palloc_free_page(page->frame->kva);
 		free(page->frame);
 		page->frame = NULL;
@@ -170,14 +172,7 @@ struct mmap_info *make_mmap_info(struct lazy_load_info *info, int mapping_count)
 void *do_mmap(void *addr, size_t length, int writable,
 			  struct file *file, off_t offset)
 {
-	// aux에 넣어줄 정보
-	size_t zero_byte = PGSIZE - length;
-	/** TODO: AUX 만들기
-	 * mapping 카운트???
-	 */
-
 	/* 지연 로딩과 스왑 시의 백업 정보 저장 */
-
 	off_t file_size = file_length(file);
 	off_t read_size = file_size - offset;
 	if (read_size < 0)
@@ -186,16 +181,21 @@ void *do_mmap(void *addr, size_t length, int writable,
 	void *cur_addr = addr;
 	off_t cur_offset = offset;
 	struct file *reopen_file = file_reopen(file);
-	int mapping_count = 0;
+	int mapping_count = 0; /* mmap은 여러 페이지에 걸쳐 매핑될 수 있습니다.
+	munmap 시에 어디까지 해제해줄 것인지 판단할 기준이 됩니다 */
 
 	while (remain_length > 0)
 	{
+		/* 남은 mmap 매핑 길이가 4KB보다 크면 4KB로 맞춥니다 */
 		size_t allocate_length = remain_length > PGSIZE ? PGSIZE : remain_length;
+		/* 지연 로딩 시 필요한 정보를 생성합니다 */
 		struct lazy_load_info *info = make_info(reopen_file, cur_offset, allocate_length);
 		struct mmap_info *mmap_info = make_mmap_info(info, mapping_count);
 		void *aux = mmap_info;
 
+		/* mmap 또한 지연 로딩이 필요합니다 */
 		vm_alloc_page_with_initializer(VM_MMAP, cur_addr, writable, lazy_load_segment, aux);
+		/* remain_length는 unsigned 형입니다. 따라서 음수가 없기에 미리 break를 해줘야 합니다 */
 		if (remain_length < PGSIZE)
 			break;
 		remain_length -= PGSIZE;
@@ -231,6 +231,8 @@ static bool is_my_mmap(void *addr, struct file *mmap_file, int mmap_count)
 void do_munmap(void *addr)
 {
 	struct supplemental_page_table *spt = &thread_current()->spt;
+	/* SPT에 없으면 해제할 수 없습니다 !! */
+	/* 항상 mmap 영역의 첫번째 주소를 준다고 합니다 */
 	struct page *target_page = spt_find_page(spt, addr);
 	if (target_page == NULL)
 		return;
@@ -240,11 +242,13 @@ void do_munmap(void *addr)
 	int target_mmap_count = file_page->mapping_count;
 
 	addr += PGSIZE; // 다음 mmap_file 찾기
+	/* while 루프를 통해 연속된 페이지가 같은 mmap 영역인지 확인합니다 */
 	while (is_my_mmap(addr, target_file, ++target_mmap_count))
 	{
 		struct page *remove_page = spt_find_page(spt, addr);
 		spt_remove_page(spt, remove_page);
 		addr += PGSIZE;
 	}
+	/* 첫번째 주소를 해제합니다 */
 	spt_remove_page(spt, target_page);
 }
