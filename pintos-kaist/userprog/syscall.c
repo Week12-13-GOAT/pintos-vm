@@ -352,17 +352,25 @@ void sys_exit(int status)
 
 bool sys_create(const char *file, unsigned initial_size)
 {
+	lock_acquire(&filesys_lock);
 	check_address(file);
 	if (file == NULL || strcmp(file, "") == 0)
 	{
 		sys_exit(-1);
 	}
-	return filesys_create(file, initial_size);
+
+	bool success = filesys_create(file, initial_size);
+	lock_release(&filesys_lock);
+	return success;
 }
 
 bool sys_remove(const char *file)
 {
-	return filesys_remove(file);
+	check_address(file);
+	lock_acquire(&filesys_lock);
+	bool success = filesys_remove(file);
+	lock_release(&filesys_lock);
+	return success;
 }
 
 int sys_filesize(int fd)
@@ -456,6 +464,7 @@ int sys_open(const char *file)
 	struct file *file_obj = filesys_open(file);
 	if (file_obj == NULL)
 	{
+		lock_release(&filesys_lock); 
 		return -1;
 	}
 
