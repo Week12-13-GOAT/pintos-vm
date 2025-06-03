@@ -6,6 +6,7 @@
 #include "threads/mmu.h"
 // Project 3 : VM
 #include "kernel/hash.h"
+#include "userprog/process.h"
 
 /* 각 서브시스템의 초기화 코드를 호출하여 가상 메모리 서브시스템을 초기화합니다. */
 void vm_init(void)
@@ -46,7 +47,7 @@ static bool my_less(const struct hash_elem *a, const struct hash_elem *b, void *
 /* 초기화 함수와 함께 대기 중인 페이지 객체를 생성합니다. 페이지를 직접 생성하지 말고,
  * 반드시 이 함수나 vm_alloc_page를 통해 생성하세요. */
 bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writable,
-                           vm_initializer *init, void *aux)
+                                    vm_initializer *init, void *aux)
 {
 
    ASSERT(VM_TYPE(type) != VM_UNINIT)
@@ -97,7 +98,6 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
       return true;
    }
 
-   return false;
 err:
    return false;
 }
@@ -125,7 +125,7 @@ spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 
 /* Insert PAGE into spt with validation. */
 bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
-                struct page *page UNUSED)
+                     struct page *page UNUSED)
 {
    // int succ = false;
    /* TODO: Fill this function. */
@@ -145,7 +145,7 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
    }
 
    entry->va = page->va; // 가상 주소 : page 구조체의 va 필드 -> SPT_entry의 va 필드
-   entry->page = page;     // 페이지 참조 : page 구조체의 주소 -> SPT_entry의 page 포인터
+   entry->page = page;   // 페이지 참조 : page 구조체의 주소 -> SPT_entry의 page 포인터
 
    if (hash_insert(&spt->SPT_hash_list, &entry->elem) != NULL)
    {
@@ -184,8 +184,7 @@ void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
    return true;
 }
 
-static struct frame 
-*vm_get_victim(void)
+static struct frame *vm_get_victim(void)
 {
    struct list_elem *clock_now;
    struct frame *victim = list_entry(list_begin(&frame_table), struct frame, elem);
@@ -228,16 +227,15 @@ vm_evict_frame(void)
    if (victim == NULL)
       return NULL;
    /* TODO: swap out the victim and return the evicted frame. */
-   
-   
+
    struct page *victim_page = victim->page;
    if (victim_page == NULL)
       return NULL;
    /** TODO: 여기서 swap_out 매크로를 호출??
-    *   pml4_clear_page를 아마 사용?? (잘 모름)                                                                                                                                         
+    *   pml4_clear_page를 아마 사용?? (잘 모름)
     */
-   
-   if(!swap_out(victim_page))
+
+   if (!swap_out(victim_page))
       return NULL;
    pml4_clear_page(thread_current()->pml4, victim_page->va);
    list_remove(&victim->elem);
@@ -256,14 +254,14 @@ vm_get_frame(void)
    struct frame *frame = malloc(sizeof(struct frame));
    ASSERT(frame != NULL);
 
-
    frame->kva = palloc_get_page(PAL_USER | PAL_ZERO);
-   if(frame->kva == NULL){
+   if (frame->kva == NULL)
+   {
       struct frame *victim1 = vm_evict_frame();
-      
-      ASSERT(victim1 !=NULL);
 
-      frame->kva = victim1->kva;  // victim의 물리 페이지를 재활용
+      ASSERT(victim1 != NULL);
+
+      frame->kva = victim1->kva; // victim의 물리 페이지를 재활용
       free(victim1);
    }
    frame->page = NULL;
@@ -274,7 +272,6 @@ vm_get_frame(void)
     * pml4_clear_page를 사용해서 물리 주소를 클리어 합니다
     */
 
-   
    ASSERT(frame->page == NULL);
    return frame;
 }
@@ -297,7 +294,7 @@ vm_handle_wp(struct page *page UNUSED)
 
 /* Return true on success */
 bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
-                   bool user UNUSED, bool write UNUSED, bool not_present UNUSED)
+                         bool user UNUSED, bool write UNUSED, bool not_present UNUSED)
 {
    struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
    addr = pg_round_down(addr);
@@ -461,7 +458,25 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED, st
          continue;
       }
 
-      /* 2) type이 uninit이 아니면 */
+      /* 2) type이 file-backed이면 */
+      if (type == VM_FILE)
+      {
+         struct file_page *src_info = &src_page->file;
+         struct lazy_load_info *info = make_info(file_reopen(src_info->file), src_info->offset, src_info->read_byte);
+         struct mmap_info *mmap_info = make_mmap_info(info, src_info->mapping_count);
+         void *aux = mmap_info;
+
+         if (!vm_alloc_page_with_initializer(type, upage, writable, lazy_load_segment, aux))
+            return false;
+
+         /* 부모에서 이미 초기화된 페이지이기에 바로 명시적 초기화 호출 */
+         if (!vm_claim_page(upage))
+            return false;
+
+         continue;
+      }
+
+      /* 3) type이 anon이면 */
       if (!vm_alloc_page_with_initializer(type, upage, writable, NULL, NULL)) // uninit page 생성 & 초기화
          // init(lazy_load_segment)는 page_fault가 발생할때 호출됨
          // 지금 만드는 페이지는 page_fault가 일어날 때까지 기다리지 않고 바로 내용을 넣어줘야 하므로 필요 없음
