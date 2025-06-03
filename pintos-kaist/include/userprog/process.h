@@ -11,4 +11,6 @@ void process_exit(void);
 void process_activate(struct thread *next);
 bool lazy_load_segment(struct page *page, void *aux);
 
+struct lock filesys_lock;
+
 #endif /* userprog/process.h */
