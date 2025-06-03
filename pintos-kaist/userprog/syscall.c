@@ -35,7 +35,6 @@ int sys_wait(tid_t pid);
 int sys_dup2(int oldfd, int newfd);
 void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset);
 
-struct lock filesys_lock;
 /* 시스템 콜.
  *
  * 이전에는 시스템 콜 서비스가 인터럽트 핸들러(예: 리눅스의 int 0x80)에 의해 처리되었습니다.
@@ -464,7 +463,7 @@ int sys_open(const char *file)
 	struct file *file_obj = filesys_open(file);
 	if (file_obj == NULL)
 	{
-		lock_release(&filesys_lock); 
+		lock_release(&filesys_lock);
 		return -1;
 	}
 

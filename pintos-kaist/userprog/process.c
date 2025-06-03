@@ -270,7 +270,9 @@ int process_exec(void *f_name)
    _if.cs = SEL_UCSEG;
    _if.eflags = FLAG_IF | FLAG_MBS;
 
+   lock_acquire(&filesys_lock);
    struct file *new_file = filesys_open(first_word);
+   lock_release(&filesys_lock);
    /* 현재 컨텍스트를 제거합니다. */
 
    process_cleanup();
@@ -516,7 +518,9 @@ load(const char *file_name, struct intr_frame *if_)
    process_activate(thread_current());
 
    /* 실행 파일을 엽니다. */
+   lock_acquire(&filesys_lock);
    file = filesys_open(file_name);
+   lock_release(&filesys_lock);
    if (file == NULL)
    {
       printf("load: %s: open failed\n", file_name);
