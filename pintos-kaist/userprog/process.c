@@ -234,7 +234,7 @@ __do_fork(void *aux)
    sema_up(&parent->fork_sema); // 동기화 완료, 부모 프로세스 락 해제
    if (succ)
       do_iret(&if_); // 이 임시 인터럽트 프레임의 정보를 가지고 유저 모드로 점프
-                  // 여기서 NPE 터지는중..
+                     // 여기서 NPE 터지는중..
 error:
    sema_up(&parent->fork_sema);
    sys_exit(TID_ERROR);
@@ -304,8 +304,8 @@ static int parse_args(char *target, char *argv[])
    char *save_ptr; // 파싱 상태를 저장할 변수!
 
    for (token = strtok_r(target, " ", &save_ptr);
-       token != NULL;
-       token = strtok_r(NULL, " ", &save_ptr))
+        token != NULL;
+        token = strtok_r(NULL, " ", &save_ptr))
    {
       argv[argc++] = token; // 각 인자의 포인터 저장
    }
@@ -438,13 +438,13 @@ void process_activate(struct thread *next)
 /* ELF 타입. [ELF1] 1-2 참고. */
 #define EI_NIDENT 16
 
-#define PT_NULL 0         /* Ignore. */
-#define PT_LOAD 1         /* Loadable segment. */
-#define PT_DYNAMIC 2      /* Dynamic linking info. */
+#define PT_NULL 0           /* Ignore. */
+#define PT_LOAD 1           /* Loadable segment. */
+#define PT_DYNAMIC 2        /* Dynamic linking info. */
 #define PT_INTERP 3         /* Name of dynamic loader. */
-#define PT_NOTE 4         /* Auxiliary info. */
-#define PT_SHLIB 5         /* Reserved. */
-#define PT_PHDR 6         /* Program header table. */
+#define PT_NOTE 4           /* Auxiliary info. */
+#define PT_SHLIB 5          /* Reserved. */
+#define PT_PHDR 6           /* Program header table. */
 #define PT_STACK 0x6474e551 /* Stack segment. */
 
 #define PF_X 1 /* Executable. */
@@ -489,8 +489,8 @@ struct ELF64_PHDR
 
 static bool validate_segment(const struct Phdr *, struct file *);
 static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
-                   uint32_t read_bytes, uint32_t zero_bytes,
-                   bool writable);
+                         uint32_t read_bytes, uint32_t zero_bytes,
+                         bool writable);
 
 /* FILE_NAME에서 현재 스레드로 ELF 실행 파일을 로드합니다.
  * 실행 진입점은 *RIP에, 초기 스택 포인터는 *RSP에 저장됩니다.
@@ -525,7 +525,7 @@ load(const char *file_name, struct intr_frame *if_)
 
    /* 실행 헤더를 읽고 검증합니다. */
    if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr || memcmp(ehdr.e_ident, "\177ELF\2\1\1", 7) || ehdr.e_type != 2 || ehdr.e_machine != 0x3E // amd64
-      || ehdr.e_version != 1 || ehdr.e_phentsize != sizeof(struct Phdr) || ehdr.e_phnum > 1024)
+       || ehdr.e_version != 1 || ehdr.e_phentsize != sizeof(struct Phdr) || ehdr.e_phnum > 1024)
    {
       printf("load: %s: error loading executable\n", file_name);
       goto done;
@@ -589,7 +589,7 @@ load(const char *file_name, struct intr_frame *if_)
                zero_bytes = ROUND_UP(page_offset + phdr.p_memsz, PGSIZE);
             }
             if (!load_segment(file, file_page, (void *)mem_page,
-                          read_bytes, zero_bytes, writable))
+                              read_bytes, zero_bytes, writable))
                goto done;
          }
          else
@@ -616,7 +616,7 @@ load(const char *file_name, struct intr_frame *if_)
 
    while (if_->rsp % 8 != 0)
    {
-      if_->rsp--;              // 주소값을 1 내리고
+      if_->rsp--;               // 주소값을 1 내리고
       *(uint8_t *)if_->rsp = 0; // 데이터에 0 삽입 => 8바이트 저장
    }
 
@@ -707,7 +707,7 @@ static bool install_page(void *upage, void *kpage, bool writable);
  * 성공 시 true, 메모리 할당 오류나 디스크 읽기 오류 발생 시 false를 반환합니다. */
 static bool
 load_segment(struct file *file, off_t ofs, uint8_t *upage,
-          uint32_t read_bytes, uint32_t zero_bytes, bool writable)
+             uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
    ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
    ASSERT(pg_ofs(upage) == 0);
@@ -829,7 +829,7 @@ bool lazy_load_segment(struct page *page, void *aux)
  */
 static bool
 load_segment(struct file *file, off_t ofs, uint8_t *upage,
-          uint32_t read_bytes, uint32_t zero_bytes, bool writable)
+             uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
    ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
    ASSERT(pg_ofs(upage) == 0);
@@ -841,7 +841,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
        * FILE에서 PAGE_READ_BYTES 바이트를 읽고
        * 남은 PAGE_ZERO_BYTES 바이트는 0으로 초기화합니다. */
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE; // 4KB까지만 읽어라
-      size_t page_zero_bytes = PGSIZE - page_read_bytes;               // 0 패딩 사이즈는 4KB - read_byte
+      size_t page_zero_bytes = PGSIZE - page_read_bytes;                  // 0 패딩 사이즈는 4KB - read_byte
 
       /* TODO: Set up aux to pass information to the lazy_load_segment. */
       struct lazy_load_info *aux = malloc(sizeof(struct lazy_load_info)); // 전달해야할 인자
@@ -854,10 +854,8 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
       aux->zerobyte = page_zero_bytes;
 
       if (!vm_alloc_page_with_initializer(VM_ANON, upage,
-                                 writable, lazy_load_segment, aux))
+                                          writable, lazy_load_segment, aux))
          return false;
-
-      dprintf("현재 쓰레드 : %s, 현재 hash size : %lu\n", thread_current()->name, hash_size(&thread_current()->spt.SPT_hash_list));
 
       /* Advance. */
       read_bytes -= page_read_bytes;
