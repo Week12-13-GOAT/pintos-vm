@@ -248,19 +248,24 @@ void sys_munmap(void *addr)
 
 void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 {
+	/* 파일 입출력에는 mmap이 불가능합니다 */
 	if (fd < 2)
 		return MAP_FAILED;
 
+	/* 파일의 사이즈가 0이면 mmap이 불가능합니다 */
 	int filesize = sys_filesize(fd);
 	if (filesize == 0 || length == 0)
 		return MAP_FAILED;
 
+	/* 길이가 비정상적일떄 mmap이 불가능합니다 */
 	if (length > (uintptr_t)addr)
 		return MAP_FAILED;
 
+	/* addr이나 offset이 페이지 정렬되어있지 않으면 mmap이 불가능합니다 */
 	if ((uint64_t)addr == 0 || (uint64_t)addr % PGSIZE != 0 || offset % PGSIZE != 0 || !is_user_vaddr(addr))
 		return MAP_FAILED;
 
+	/* 해당 fd에 파일이 없으면 mmap이 불가능합니다 */
 	struct file *target_file = thread_current()->fd_table[fd];
 	if (target_file == NULL)
 		return MAP_FAILED;
@@ -268,6 +273,7 @@ void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	void *start_page = addr;
 	void *end_page = pg_round_up(addr + length);
 
+	/* 해당 페이지 영역에 이미 할당된 페이지가 있으면 mmap이 불가능 합니다 */
 	for (; end_page > start_page; start_page += PGSIZE)
 	{
 		if (spt_find_page(&thread_current()->spt, start_page) != NULL)
