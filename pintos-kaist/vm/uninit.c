@@ -50,7 +50,7 @@ uninit_initialize(struct page *page, void *kva)
 	vm_initializer *init = uninit->init;
 
 	void *aux = uninit->aux;
-	if (uninit->type == VM_MMAP)
+	if (uninit->type == VM_MMAP || uninit->type == VM_FILE)
 	{
 		struct mmap_info *mmap_info = (struct mmap_info *)aux;
 		aux = mmap_info->info;
