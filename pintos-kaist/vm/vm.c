@@ -330,18 +330,20 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 
    uintptr_t rsp = thread_current()->user_rsp; // 유저 스택의 rsp 가져오기
 
-   if ((uintptr_t)addr >= rsp - STACK_GROW_RANGE && addr < USER_STACK && addr >= USER_STACK - (1 << 20))
+   struct page *page = spt_find_page(spt, addr);
+   // if (page == NULL)
+   // {
+   //    return false;
+   // }
+   // 찐 폴트
+   if (page == NULL && (uintptr_t)addr >= rsp - STACK_GROW_RANGE && addr < USER_STACK && addr >= USER_STACK - (1 << 20))
    {
       vm_stack_growth(addr);
       return true;
    }
 
-   struct page *page = spt_find_page(spt, addr);
    if (page == NULL)
-   {
       return false;
-   }
-   // 찐 폴트
 
    if (write == true && !page->writable)
       return false;
@@ -358,10 +360,10 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
  * DO NOT MODIFY THIS FUNCTION. */
 void vm_dealloc_page(struct page *page)
 {
-   page->frame->ref_cnt--;
+   if (page->frame)
+      page->frame->ref_cnt--;
 
-   if (page->frame->ref_cnt == 0)
-      destroy(page);
+   destroy(page);
    free(page);
 }
 
@@ -525,6 +527,8 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED, st
       // vm_claim_page으로 요청해서 매핑 & 페이지 타입에 맞게 초기화
       if (!vm_copy_claim_page(upage, src_page, dst))
          return false;
+      // if (!vm_claim_page(upage))
+      // return false;
 
       // 매핑된 프레임에 내용 로딩
       struct page *dst_page = spt_find_page(dst, upage);

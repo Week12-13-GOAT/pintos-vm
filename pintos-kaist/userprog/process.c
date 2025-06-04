@@ -388,7 +388,6 @@ void process_exit(void)
       file_close(curr->running_file);
    }
 
-   dprintf("process_exit, 현재 쓰레드 : %s, hash size : %lu\n", curr->name, hash_size(&curr->spt.SPT_hash_list));
    process_cleanup();
    sema_up(&curr->wait_sema);
    sema_down(&curr->free_sema);
@@ -401,7 +400,6 @@ process_cleanup(void)
    struct thread *curr = thread_current();
 
 #ifdef VM
-   dprintf("process_cleanup, 현재 쓰레드 : %s, hash size : %lu\n", curr->name, hash_size(&curr->spt.SPT_hash_list));
    supplemental_page_table_kill(&curr->spt);
 #endif
 
