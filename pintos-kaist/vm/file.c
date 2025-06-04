@@ -75,7 +75,8 @@ file_backed_swap_in(struct page *page, void *kva)
 	size_t read_byte = file_page->read_byte;
 
 	// 파일에서 데이터를 읽어와 kva(페이지가 매핑된 커널 가상 주소)에 저장
-	if (file_read_at(file, kva, read_byte, offset) != (off_t)read_byte) {
+	if (file_read_at(file, kva, read_byte, offset) != (off_t)read_byte)
+	{
 		// 읽은 바이트 수가 기대치와 다르면 오류 처리
 		return false;
 	}
@@ -102,17 +103,19 @@ file_backed_swap_out(struct page *page)
 	bool dirty_bit = pml4_is_dirty(curr->pml4, page->va);
 
 	// dirty bit가 true이면, 즉 메모리에서 수정된 경우
-	if (dirty_bit == true) {
+	if (dirty_bit == true)
+	{
 		// 공유 자원 접근 → 락 걸고 접근
 		lock_acquire(&filesys_lock);
-		if (file_write_at(file_page->file,			// mmap된 파일 객체
-						page->frame->kva,			// 페이지의 실제 물리 주소
-						file_page->read_byte,		// 실제로 파일에 기록할 바이트 수
-						file_page->offset)			// 파일 내 시작 위치
-			!= (off_t)file_page->read_byte) {
-				// write 실패하면 lock 해제 해야겠지? 
-				lock_release(&filesys_lock);
-				return false;
+		if (file_write_at(file_page->file,		// mmap된 파일 객체
+						  page->frame->kva,		// 페이지의 실제 물리 주소
+						  file_page->read_byte, // 실제로 파일에 기록할 바이트 수
+						  file_page->offset)	// 파일 내 시작 위치
+			!= (off_t)file_page->read_byte)
+		{
+			// write 실패하면 lock 해제 해야겠지?
+			lock_release(&filesys_lock);
+			return false;
 		}
 		// 파일 쓰기 완료 후 락 해제
 		lock_release(&filesys_lock);
@@ -120,7 +123,7 @@ file_backed_swap_out(struct page *page)
 		// 더티 비트 클리어(쓰기 완!)
 		pml4_set_dirty(curr->pml4, page->va, false);
 	}
-	//초기화는 victim에서 
+	// 초기화는 victim에서
 	page->frame->page = NULL;
 	page->frame = NULL;
 
@@ -130,7 +133,7 @@ file_backed_swap_out(struct page *page)
 /* 파일 기반 페이지를 소멸시킵니다. PAGE는 호출자가 해제합니다. */
 static void
 file_backed_destroy(struct page *page)
-{	
+{
 	// file_page는 file-backed 페이지에 대한 메타데이터를 담고 있는 구조체
 	struct file_page *file_page UNUSED = &page->file;
 	/** TODO: dirty_bit 확인 후 write_back
@@ -147,10 +150,10 @@ file_backed_destroy(struct page *page)
 	if (pml4_is_dirty(thread_current()->pml4, page->va))
 	{
 		lock_acquire(&filesys_lock);
-		off_t written = file_write_at(file_page->file,			// mmap으로 매핑된 파일 객체
-									page->frame->kva,			// 물리 메모리 상 해당 페이지의 커널 주소
-									file_page->read_byte, 		// 실제로 파일에 쓸 바이트 수
-									file_page->offset);			// mmap할 때 저장된 파일 내부의 오프셋 위치
+		off_t written = file_write_at(file_page->file,		// mmap으로 매핑된 파일 객체
+									  page->frame->kva,		// 물리 메모리 상 해당 페이지의 커널 주소
+									  file_page->read_byte, // 실제로 파일에 쓸 바이트 수
+									  file_page->offset);	// mmap할 때 저장된 파일 내부의 오프셋 위치
 		lock_release(&filesys_lock);
 		ASSERT(written == file_page->read_byte);
 
@@ -159,8 +162,8 @@ file_backed_destroy(struct page *page)
 	}
 
 	// 해당 페이지가 물리 프레임에 매핑되어 있으면
-	if (page->frame != NULL)
-	{	
+	if (page->frame != NULL && page->frame->ref_cnt < 1)
+	{
 		// 물리 페이지를 해제하고, frame 구조체도 동적 메모리 해제
 		palloc_free_page(page->frame->kva);
 		free(page->frame);
