@@ -265,6 +265,7 @@ vm_get_frame(void)
       free(victim1);
    }
    frame->page = NULL;
+   frame->ref_cnt = 1;
    frame_table_insert(&frame->elem);
 
    ASSERT(frame->page == NULL);
@@ -285,6 +286,30 @@ vm_stack_growth(void *addr UNUSED)
 static bool
 vm_handle_wp(struct page *page UNUSED)
 {
+   if (page == NULL)
+   {
+      return false;
+   }
+   struct frame *copy_frame = page->frame;
+
+   if (copy_frame->ref_cnt > 1)
+   {
+      struct frame *frame = vm_get_frame();
+      page->frame = frame;
+      memcpy(frame->kva, copy_frame->kva, PGSIZE);
+      copy_frame->ref_cnt--;
+
+      if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, true))
+         return false;
+   }
+   else
+   {
+      copy_frame->page = page;
+      if (!pml4_set_page(thread_current()->pml4, page->va, copy_frame->kva, true))
+         return false;
+   }
+
+   return true;
 }
 
 /* Return true on success */
@@ -321,6 +346,9 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
    if (write == true && !page->writable)
       return false;
 
+   if (write == true && page->writable && page->frame != NULL)
+      return vm_handle_wp(page);
+
    ASSERT(page->operations != NULL && page->operations->swap_in != NULL);
 
    return vm_do_claim_page(page);
@@ -330,11 +358,14 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
  * DO NOT MODIFY THIS FUNCTION. */
 void vm_dealloc_page(struct page *page)
 {
-   destroy(page);
+   page->frame->ref_cnt--;
+
+   if (page->frame->ref_cnt == 0)
+      destroy(page);
    free(page);
 }
 
-/* VA에 할당된 페이지를 요구합니다 . */
+/* VA에 할당된 페이지를 요구합니다 . 왜 맨날 요구만 함. */
 bool vm_claim_page(void *va UNUSED)
 {
    struct page *page = spt_find_page(&thread_current()->spt, va); // 스택 첫번째페이지
@@ -344,7 +375,7 @@ bool vm_claim_page(void *va UNUSED)
    return vm_do_claim_page(page);
 }
 
-/* PAGE를 요구하고 mmu를 설정합니다*/
+/* PAGE를 요구하고 mmu를 설정합니다. 근데 저는 안할겁니다.*/
 static bool
 vm_do_claim_page(struct page *page)
 {
@@ -357,6 +388,29 @@ vm_do_claim_page(struct page *page)
 
    /* TODO: Insert page table entry to map page's VA to frame's PA. */
    if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))
+      return false;
+
+   return swap_in(page, frame->kva);
+}
+
+bool vm_copy_claim_page(void *va, struct page *parent, struct supplemental_page_table *parent_spt)
+{
+   struct page *page = spt_find_page(&thread_current()->spt, va); // 스택 첫번째페이지
+   if (page == NULL)
+      return false;
+
+   void *temp = page->operations->swap_in;
+   struct frame *frame = parent->frame;
+   frame->ref_cnt++;
+
+   if (frame->ref_cnt == 1)
+      return true;
+
+   /* Set links */
+   page->frame = frame;
+
+   /* TODO: Insert page table entry to map page's VA to frame's PA. */
+   if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, false))
       return false;
 
    return swap_in(page, frame->kva);
@@ -456,7 +510,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED, st
             return false;
 
          /* 부모에서 이미 초기화된 페이지이기에 바로 명시적 초기화 호출 */
-         if (!vm_claim_page(upage))
+         if (!vm_copy_claim_page(upage, src_page, dst))
             return false;
 
          continue;
@@ -469,7 +523,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED, st
          return false;
 
       // vm_claim_page으로 요청해서 매핑 & 페이지 타입에 맞게 초기화
-      if (!vm_claim_page(upage))
+      if (!vm_copy_claim_page(upage, src_page, dst))
          return false;
 
       // 매핑된 프레임에 내용 로딩

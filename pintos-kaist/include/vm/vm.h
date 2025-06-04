@@ -73,6 +73,8 @@ struct page
 struct frame
 {
 	void *kva;
+	/* extra-cow */
+	int ref_cnt;
 	struct page *page;
 	// frame_table 소속 elem
 	struct list_elem elem;
@@ -159,5 +161,6 @@ struct mmap_info *make_mmap_info(struct lazy_load_info *info,
 struct lazy_load_info *make_info(
 	struct file *file, off_t offset, size_t read_byte);
 
-#endif /* VM_VM_H */
+bool vm_copy_claim_page(void *va, struct page *parent, struct supplemental_page_table *parent_spt);
 
+#endif /* VM_VM_H */
