@@ -71,6 +71,7 @@ anon_swap_in(struct page *page, void *kva)
 	struct anon_page *anon_page = &page->anon;
 	int swap_idx = anon_page->swap_idx;
 
+	// 예외 처리 → swap_idx가 -1이면 페이지가 스왑아웃된 적이 없거나 이미 복구되었으므로 스왑 인 생략
 	if (swap_idx < 0) {
 		return false;
 	}
@@ -83,11 +84,20 @@ anon_swap_in(struct page *page, void *kva)
 	 * 프레임하고 페이지 매핑해주기
 	 */
 
+	// 한 섹터는 512바이트이고, 한 페이지는 4KB(4096바이트)이므로
+	// 총 8개의 섹터를 순차적으로 읽어야 전체 페이지 데이터를 복원할 수 있음
+	// swap_idx는 스왑 테이블 상의 페이지 단위 인덱스를 의미하며,
+	// 실제 섹터 번호는 swap_idx * 8부터 시작함
 	for (int i = 0; i < 8; i++) {
-		disk_read(swap_disk, (swap_idx * 8) + i, kva + (DISK_SECTOR_SIZE * i));
+		disk_read(swap_disk,                            // 스왑 디스크에서 데이터를 읽어옴
+				(swap_idx * 8) + i,                    // 8개의 연속된 섹터에 페이지가 저장되어 있으므로, i를 더해가며 읽음
+				kva + (DISK_SECTOR_SIZE * i));         // 읽어온 데이터를 커널 가상 주소 kva에 512B 단위로 복사
 	}
-	
+
+	// 스왑 테이블에서 해당 스왑 슬롯을 비어있다고 표시 (해당 슬롯 재사용 가능하도록)
 	bitmap_reset(swap_table, swap_idx);
+
+	// 페이지가 더 이상 스왑 영역에 존재하지 않음을 나타내기 위해 swap_idx를 -1로 초기화
 	anon_page->swap_idx = -1;
 
 	return true;
@@ -116,12 +126,16 @@ anon_swap_out(struct page *page)
 		return false;
 	}
 
+	// swap in에 자세히 주석을 달아 놓았음 잘 살펴 보셈
 	for(int i = 0; i < 8; i++) {
 		disk_write(swap_disk, (swap_idx * 8) + i, page->frame->kva + (DISK_SECTOR_SIZE * i));
 	}
 	
+	// 페이지와 프레임 간의 연결을 끊음 (프레임은 더 이상 이 페이지를 참조 하지 않음)
 	page->frame->page = NULL;
 	page->frame = NULL;
+
+	// 스왑 슬록 인덱스를 anon_page에 저장해 나중에 다시 swap_in할 수 있게 함
 	anon_page->swap_idx = swap_idx;
 
 	return true;
@@ -132,9 +146,12 @@ static void
 anon_destroy(struct page *page)
 {
 	struct anon_page *anon_page = &page->anon;
+	// swap_idx가 0보다 작을 경우는 페이지가 스왑 아웃이 된 적이 없거나 이미 복구 되어 swap_idx가 -1이면 추가 작업 X, 종료
 	if(anon_page->swap_idx < 0) {
 		return;
 	}
 
+	// 스왑 테이블에서 해당 스왑 슬롯을 비어있는 상태로 표시
+	// 즉, 더 이상 해당 스왑 슬롯은 사용되지 않으며, 이후 다른 페이지가 재사용 가능
 	bitmap_reset(swap_table, anon_page->swap_idx);
 }
