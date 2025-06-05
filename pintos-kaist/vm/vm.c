@@ -248,26 +248,63 @@ vm_evict_frame(void)
  * 이 함수는 프레임을 교체하여 사용 가능한 메모리 공간을 확보합니다.*/
 static struct frame *
 vm_get_frame(void)
-{
-   /* 반드시 free해라 뒤지기싫으면.. */
+{ 
+   /* 1. 새로운 frame 구조체를 메모리에 할당
+      이는 물리 페이지의 메타데이터를 저장할 공간
+      반드시 free해라 뒤지기싫으면.. 
+   */
    struct frame *frame = malloc(sizeof(struct frame));
-   ASSERT(frame != NULL);
+   // 예외 처리 → 할당 실패시 시스템 중단
+   ASSERT(frame != NULL);  
 
+   /* 2. 실제 물리 페이지(4KB) 할당 시도 
+      PAL_USER : 사용자 프로세스용 메모리 풀에서 할당
+      PAL_ZERO : 할당된 페이지를 0으로 초기화
+   */
    frame->kva = palloc_get_page(PAL_USER | PAL_ZERO);
+
+   /* 3. 메모리 부족 상황 처리
+      사용 가능한 물리 페이지가 없는 경우 처리
+   */
    if (frame->kva == NULL)
-   {
+   {  
+      /* 3.1. 희생자(victim) 프레인 선택 및 교체
+         vm_evict_frame()은 페이지 교체 알고리즘(처음: FIFO, 지금: Clock)을 사용하여
+         교체할 프레임을 선택, 해당 페이지를 디스코로 내보냅니다.
+      */
       struct frame *victim1 = vm_evict_frame();
 
+      // 예외 처리 → 교체 실패시 시스템 중단
       ASSERT(victim1 != NULL);
 
+      /* 3.2. 희생자의 물리 페이지를 재활용
+         교체된 프레임의 물리 주소를 새로운 프레임이 사용
+      */
       frame->kva = victim1->kva; // victim의 물리 페이지를 재활용
+
+      /* 3.3. 희생자 프레임 구조체 해제
+         물리 페이지는 재활용하지만, 메타데이터는 새로 만듦
+      */
       free(victim1);
    }
-   frame->page = NULL;
-   frame->ref_cnt = 1;
-   frame_table_insert(&frame->elem);
 
+   /* 4. 새로운 프레임 초기화
+      아직 어떤 가상 페이지와도 연결되지 않은 상태
+   */
+   frame->page = NULL;                 // 연결된 가상 페이지 X
+   frame->ref_cnt = 1;                 // 참조 카운터 초기화(COW extra 과제 용)
+   
+   /* 5. 프레임 테이블에 등록
+      시스템이 이 프레임을 추적할 수 있도록 전역 프레임 테이블에 추가
+   */
+   frame_table_insert(&frame->elem);   
+
+   /* 예외 처리 → 프레임이 올바르게 초기화 되었나? */
    ASSERT(frame->page == NULL);
+
+   /* 6. 할당된 프레임 반환
+      이제 이 프레임은 가상 페이지와 연결된 준비가 완료되었습니다.
+   */
    return frame;
 }
 
@@ -366,31 +403,61 @@ void vm_dealloc_page(struct page *page)
    free(page);
 }
 
-/* VA에 할당된 페이지를 요구합니다 . 왜 맨날 요구만 함. */
+/* VA에 할당된 페이지를 요구합니다. 
+   이 함수는 Page Fault 발생 시 호출되어 가상 페이지를 물리 메모리에 로드합니다.    
+*/
 bool vm_claim_page(void *va UNUSED)
-{
-   struct page *page = spt_find_page(&thread_current()->spt, va); // 스택 첫번째페이지
-   if (page == NULL)
-      return false;
+{  
+   /* 1. 가상 주소로 SPT에서 해당 페이지 구조체 찾기 */
+   struct page *page = spt_find_page(&thread_current()->spt,   // 현재 스레드의 보조 페이지 테이블
+                                     va);                      // 요청된 가상 주소(e.g. 0x400000000(예시임 너무 신경 ㄴㄴ), 스택 주소, 힙 주소 등등)
+   /* 2. 예외 처리 → 페이지 존재 여부 검증
+      page == NULL인 case :
+      - 할당되지 않은 메모리 영역에 접근 (segmentation fault 상황)
+      - 잘못된 가상 주소 접근 
+      - 아직 vm_alloc_page로 생성되지 않은 페이지
+   */
+   if (page == NULL) 
+   {
+      return false;  // 실패 : 유효하지 않은 페이지 요청
+   }
 
+   /* 3. 실제 페이지 클레임 수행*/
    return vm_do_claim_page(page);
 }
 
-/* PAGE를 요구하고 mmu를 설정합니다. 근데 저는 안할겁니다.*/
+/* PAGE를 요구하고 mmu를 설정합니다.*/
 static bool
 vm_do_claim_page(struct page *page)
-{
-   void *temp = page->operations->swap_in;
+{  
+   // 1. 물리 프레임 할당
    struct frame *frame = vm_get_frame();
 
    /* Set links */
+   /* 2. 양방향 링크 설정 (페이지 ↔ 프레임 연결)
+      가상 페이지와 물리 프레임 간의 관계를 설정
+   */
    frame->page = page;
    page->frame = frame;
 
    /* TODO: Insert page table entry to map page's VA to frame's PA. */
-   if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))
+   // 3. 페이지 테이블 엔트리 설정(MMU 매핑)
+   if (!pml4_set_page(thread_current()->pml4,   // 현재 스레드 페이지 테이블
+       page->va,                                // 가상 주소
+       frame->kva,                              // 물리 주소 (커널 가상 주소)
+       page->writable))                         // 쓰기 권한
+   {                        
+   /* 매핑 실패 처리
+      실패 case : 
+      - 메모리 부족
+      - 이미 매핑된 주소
+      - 잘못된 권한 
+      등등 더 자세한 설명은 생략한다. 디버깅해서 찾아보슈
+   */
       return false;
+   }
 
+   // 4. 실제 페이지 내용 로딩
    return swap_in(page, frame->kva);
 }
 
