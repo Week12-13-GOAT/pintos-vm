@@ -43,6 +43,7 @@ static bool vm_do_claim_page(struct page *page);
 static struct frame *vm_evict_frame(void);
 static uint64_t my_hash(const struct hash_elem *e, void *aux UNUSED);
 static bool my_less(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
+static struct list_elem *clock_start;
 
 /* 초기화 함수와 함께 대기 중인 페이지 객체를 생성합니다. 페이지를 직접 생성하지 말고,
  * 반드시 이 함수나 vm_alloc_page를 통해 생성하세요. */
@@ -187,33 +188,31 @@ void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
 static struct frame *vm_get_victim(void)
 {
    struct list_elem *clock_now;
-   struct frame *victim = list_entry(list_begin(&frame_table), struct frame, elem);
-   /* TODO: 교체 정책을 여기서 구현해서 희생자 페이지 찾기 */
-   if (list_empty(&frame_table))
-      return NULL;
+   struct frame *victim;
 
    ASSERT(victim != NULL);
-   // if(clock_start == NULL || clock_start == list_end(&frame_table))
-   //    clock_start = list_begin(&frame_table);
+   if(clock_start == NULL || clock_start == list_end(&frame_table))
+      clock_start = list_begin(&frame_table);
 
-   // clock_now = clock_start;
-   // do{
-   //    victim = list_entry(clock_now,struct frame, elem);
+   clock_now = clock_start;
+   do{
+      victim = list_entry(clock_now,struct frame, elem);
 
-   //    if(victim->clock_check == false){
-   //       clock_start = list_next(clock_now);
-   //       return victim;
-   //    }
+      bool success = pml4_is_accessed(thread_current()->pml4,victim->page->va);
+      if(success == false){
+         clock_start = list_next(clock_now);
+         return victim;
+      }
 
-   //    victim->clock_check = false;
 
-   //    clock_now = list_next(clock_now);
-   //    if(clock_now == list_end(&frame_table))
-   //       clock_now = list_begin(&frame_table);
-   // } while(clock_now != clock_start);
+      pml4_set_accessed(thread_current()->pml4,victim->page->va, false);
+      clock_now = list_next(clock_now);
+      if(clock_now == list_end(&frame_table))
+         clock_now = list_begin(&frame_table);
+   } while(clock_now != clock_start);
 
-   // victim = list_entry(clock_now,struct frame, elem);
-   // clock_start = list_next(clock_now);
+   victim = list_entry(clock_now,struct frame, elem);
+   clock_start = list_next(clock_now);
 
    return victim;
 }
