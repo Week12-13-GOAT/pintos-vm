@@ -40,16 +40,26 @@ void uninit_new(struct page *page, void *va, vm_initializer *init,
 		}};
 }
 
-/* 첫 번째 폴트 시 페이지를 초기화합니다 */
+/* 첫 번째 page fault 발생 시 해당 페이지를 초기화하는 함수 */
 static bool
 uninit_initialize(struct page *page, void *kva)
-{
+{	
+	/*	페이지 구조체의 uninit 멤버를 가져옴
+		이 구조체에는 페이지 타입, 초기화 함수, aux 데이터가 저장되어 있음
+	*/ 
 	struct uninit_page *uninit = &page->uninit;
 
-	/* 먼저 가져옵니다. page_initialize가 값을 덮어쓸 수 있습니다. */
+	/*	page_initialize에서 사용할 수 있도록 먼저 init 함수를 가져옴
+		나중에 page_initializer가 이 값을 덮어쓸 수 있음
+	*/
 	vm_initializer *init = uninit->init;
 
+	// 페이지 초기화에 필요한 부가 정보를 담고 있는 aux 포인터를 가져옴
 	void *aux = uninit->aux;
+
+	/*	만약 페이지 타입이 mmap 또는 file-backed (VM_MMAP or VM_FILE)인 경우
+		aux에는 mmap_info 구조체가 들어 있으므로, 그 안의 info 필드를 사용함 
+	*/
 	if (uninit->type == VM_MMAP || uninit->type == VM_FILE)
 	{
 		struct mmap_info *mmap_info = (struct mmap_info *)aux;

@@ -45,14 +45,18 @@ static uint64_t my_hash(const struct hash_elem *e, void *aux UNUSED);
 static bool my_less(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
 static struct list_elem *clock_start;
 
-/* 초기화 함수와 함께 대기 중인 페이지 객체를 생성합니다. 페이지를 직접 생성하지 말고,
- * 반드시 이 함수나 vm_alloc_page를 통해 생성하세요. */
+/* 이 함수는 가상 주소(upage)에 해당하는 '페이지 객체'를 생성하고,
+   초기화 함수(init)와 보조 데이터(aux)를 등록
+   반드시 이 함수나 vm_alloc_page()를 통해서만 페이지를 생성해야 합니다.
+   생성된 페이지는 SPT에 등록
+*/
 bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writable,
                                     vm_initializer *init, void *aux)
 {
-
+   // type이 VM_UNINIT(아직 초기화되지 않은 타입)이면 안 됨을 보장
    ASSERT(VM_TYPE(type) != VM_UNINIT)
 
+   // 현재 스레드의 SPT(보조 페이지 테이블) 포인터를 가져옴
    struct supplemental_page_table *spt = &thread_current()->spt;
 
    /* 이미 해당 page가 SPT에 존재하는지 확인합니다 */
@@ -61,33 +65,39 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
       /* TODO: VM 타입에 따라 페이지를 생성하고, 초기화 함수를 가져온 뒤,
        * TODO: uninit_new를 호출하여 "uninit" 페이지 구조체를 생성하세요.
        * TODO: uninit_new 호출 후에는 필요한 필드를 수정해야 합니다. */
+      // 페이지 타입에 따라 적절한 초기화 함수(페이지 이니셜라이저)를 선택
       bool (*page_initializer)(struct page *, enum vm_type, void *kva);
       struct page *page = malloc(sizeof(struct page));
-
+      
+      // 메모리 할당 실패 시 에러 처리(메모리 부족 등)
       if (page == NULL)
       {
          goto err;
       }
 
+      // VM_TYPE에 따른 초기화 방법
       switch (VM_TYPE(type))
       {
       case VM_ANON:
-         page_initializer = anon_initializer;
+         page_initializer = anon_initializer;         // 익명 메모리
          break;
       case VM_MMAP:
       case VM_FILE:
-         page_initializer = file_backed_initializer;
+         page_initializer = file_backed_initializer;  // 파일 기반 메모리
          break;
       default:
-         free(page);
+         free(page);                                  // 지원하지 않는 타입이면 메모리 해제 후 에러 처리
          goto err;
          break;
       }
 
+      // 미초기화 페이지 생성 : 실제 데이터는 아직 없고, 초기화 정보만 등록
       uninit_new(page, upage, init, type, aux, page_initializer);
+      // 페이지의 쓰기 권한 설정
       page->writable = writable;
 
       /* TODO: 생성한 페이지를 spt에 삽입하세요. */
+      // SPT에 새 페이지 등록
       if (!spt_insert_page(spt, page))
       {
          // 실패 시 메모리 누수 방지 위해 free

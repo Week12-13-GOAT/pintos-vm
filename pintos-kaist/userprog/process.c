@@ -801,11 +801,15 @@ bool lazy_load_segment(struct page *page, void *aux)
    /* TODO: 이 함수를 호출할 때 VA는 사용할 수 있습니다. */
    // kva는 page 안에 이미 있다
    // 타입별로 다른 초기화 작업을 거쳐야하나?
+
+   // lazy loading에 필요한 자료를 가져옴
    struct lazy_load_info *lazy_info = (struct lazy_load_info *)aux;
    struct file *read_file = lazy_info->file;
 
+   // 필요한 만큼의 read_byte를 가져옴
    off_t my_read_byte = file_read_at(read_file, page->frame->kva, lazy_info->readbyte, lazy_info->offset);
 
+   // lazy_loading에 필요한 read_byte와 실제로 필요한 read_byte가 다르면
    if (my_read_byte != (off_t)lazy_info->readbyte)
    {
       return false;
@@ -826,6 +830,9 @@ bool lazy_load_segment(struct page *page, void *aux)
  * 이 함수로 초기화된 페이지는 WRITABLE이 true이면 사용자 프로세스가 수정할 수 있으며,
  * 아니라면 읽기 전용입니다.
  *
+ * 이 함수는 Lazy Loading 기법을 사용하므로, 실제 파일 내용은 즉시 로딩되지 않고,
+ * 페이지 폴트가 발생할 때 lazy_load_segment() 함수에 의해 로드됩니다.
+ * 
  * 메모리 할당 오류나 디스크 읽기 오류가 발생하면 false를 반환하고,
  * 성공하면 true를 반환합니다.
  */
@@ -833,10 +840,14 @@ static bool
 load_segment(struct file *file, off_t ofs, uint8_t *upage,
              uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
+   // 전체 segment 크기는 페이지 크기(PGSIZE)의 배수여야 함
    ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
+   // upage는 반드시 페이지 시작 주소여야함
    ASSERT(pg_ofs(upage) == 0);
+   // 파일 오프셋도 페이지 단위 정렬되어 있어야 함
    ASSERT(ofs % PGSIZE == 0);
 
+   // 세그먼트 끝날 때까지
    while (read_bytes > 0 || zero_bytes > 0)
    {
       /* 이 페이지를 어떻게 채울지 계산합니다.
@@ -846,24 +857,31 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;                  // 0 패딩 사이즈는 4KB - read_byte
 
       /* TODO: Set up aux to pass information to the lazy_load_segment. */
+      /* Lazy Loading을 위한 보조 정보(aux)를 준비
+         이 구조체는 실제 로딩 시 필요한 파일 정보 등을 포함
+      */
       struct lazy_load_info *aux = malloc(sizeof(struct lazy_load_info)); // 전달해야할 인자
       if (aux == NULL)
          return false;
 
-      aux->file = file_reopen(file);
-      aux->offset = ofs;
-      aux->readbyte = page_read_bytes;
-      aux->zerobyte = page_zero_bytes;
+      // Lazy Loading을 위해 필요한 정보 저장
+      aux->file = file_reopen(file);         // 나중에 읽기 위해 파일 핸들 복사
+      aux->offset = ofs;                     // 파일에서 읽기 시작할 위치
+      aux->readbyte = page_read_bytes;       // 읽을 바이트 수
+      aux->zerobyte = page_zero_bytes;       // 0으로 채울 바이트 수
 
-      if (!vm_alloc_page_with_initializer(VM_ANON, upage,
-                                          writable, lazy_load_segment, aux))
+      if (!vm_alloc_page_with_initializer(VM_ANON,             // 페이지 타입은 익명 
+                                          upage,               // 가상 주소
+                                          writable,            // 쓰기 권한
+                                          lazy_load_segment,   // 페이지 폴트 발생 시 호출될 함수
+                                          aux))                // Lazy_Loading_segment에 전달될 인자
          return false;
 
       /* Advance. */
-      read_bytes -= page_read_bytes;
-      zero_bytes -= page_zero_bytes;
-      ofs += page_read_bytes;
-      upage += PGSIZE;
+      read_bytes -= page_read_bytes;      // read_bytes 갱신
+      zero_bytes -= page_zero_bytes;      // zero_bytes 갱신
+      ofs += page_read_bytes;             // 파일 오프셋도 읽은 만큼 이동
+      upage += PGSIZE;                    // 가상 주소도 다음 페이지로 이동
    }
    return true;
 }
