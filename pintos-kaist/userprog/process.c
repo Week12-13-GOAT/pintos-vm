@@ -792,8 +792,20 @@ install_page(void *upage, void *kpage, bool writable)
 }
 #else
 /* 여기부터 코드는 project 3 이후 사용됩니다.
- * project 2만을 위해 함수를 구현하려면 위쪽 블록에서 구현하세요. */
-
+ * project 2만을 위해 함수를 구현하려면 위쪽 블록에서 구현하세요. 
+ *
+ * lazy_load_segment() 함수는 해당 가상 주소(page->va)에서
+ * 첫 페이지 폴트가 발생할 때 호출됩니다.
+ * 즉, 실제 메모리에 페이지를 로드해야 할 때 동작합니다.
+ *
+ * 파라미터:
+ * - page: 페이지 구조체, 로드 대상 페이지 정보 포함
+ * - aux: lazy_load_info 구조체 포인터, 파일 핸들, 읽을 바이트 수, 오프셋 등 로딩 정보 포함
+ *
+ * 반환값:
+ * - 성공 시 true 반환 (페이지 로드 완료)
+ * - 실패 시 false 반환 (파일 읽기 실패 등)
+ */
 bool lazy_load_segment(struct page *page, void *aux)
 {
    /* TODO: Load the segment from the file */
@@ -802,20 +814,25 @@ bool lazy_load_segment(struct page *page, void *aux)
    // kva는 page 안에 이미 있다
    // 타입별로 다른 초기화 작업을 거쳐야하나?
 
-   // lazy loading에 필요한 자료를 가져옴
+   // lazy loading에 필요한 정보를 가져옴
    struct lazy_load_info *lazy_info = (struct lazy_load_info *)aux;
    struct file *read_file = lazy_info->file;
 
    // 필요한 만큼의 read_byte를 가져옴
-   off_t my_read_byte = file_read_at(read_file, page->frame->kva, lazy_info->readbyte, lazy_info->offset);
+   off_t my_read_byte = file_read_at(read_file, 
+                                    page->frame->kva,       // 실제 물리 메모리 주소 
+                                    lazy_info->readbyte,    // 읽어야 할 바이트 수
+                                    lazy_info->offset);     // 파일 내 오프셋
 
    // lazy_loading에 필요한 read_byte와 실제로 필요한 read_byte가 다르면
    if (my_read_byte != (off_t)lazy_info->readbyte)
    {
       return false;
    }
+   // 읽은 데이터 뒤에 남는 영역을 0으로 초기화(제로 패딩)
    memset(page->frame->kva + lazy_info->readbyte, 0, lazy_info->zerobyte);
 
+   // 동적 할당한 aux 구조체 메모리 해제
    free(lazy_info);
    return true;
 }

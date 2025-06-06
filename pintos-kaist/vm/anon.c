@@ -168,19 +168,32 @@ anon_swap_out(struct page *page)
 	return true;
 }
 
-/* 익명 페이지를 소멸시킵니다. PAGE는 호출자가 해제합니다. */
+/* 
+ * anon_destroy - 익명(anonymous) 페이지를 소멸시킵니다.
+ * 
+ * 이 함수는 주어진 페이지가 메모리에서 제거될 때 호출되며,
+ * 해당 페이지가 스왑 공간을 사용 중이었다면 해당 스왑 슬롯을 해제합니다.
+ * 
+ * 매개변수:
+ * - page: 제거할 대상 페이지 (호출자가 page 자체 메모리 해제는 수행함)
+ */
 static void
 anon_destroy(struct page *page)
 {
+	// 페이지의 anon_page 구조체 접근 (swap 관련 정보 포함)
 	struct anon_page *anon_page = &page->anon;
-	// swap_idx가 0보다 작을 경우는 페이지가 스왑 아웃이 된 적이 없거나 이미 복구 되어 swap_idx가 -1이면 추가 작업 X, 종료
+
+	// 현재 스레드의 pml4에서 이 페이지에 대한 매핑을 제거 (VA -> PA 연결 해제)
 	pml4_clear_page(thread_current()->pml4, page->va);
+
+	// 스왑 아웃된 적이 없거나, 이미 스왑에서 복구되어 유효하지 않은 스왑 슬롯이면 아무 작업도 하지 않음
+	// swap_idx < 0이면 해당 페이지는 스왑 슬롯을 점유하고 있지 않음
 	if (anon_page->swap_idx < 0)
 	{
-		return;
+		return;  // 추가 작업 없이 종료
 	}
 
 	// 스왑 테이블에서 해당 스왑 슬롯을 비어있는 상태로 표시
-	// 즉, 더 이상 해당 스왑 슬롯은 사용되지 않으며, 이후 다른 페이지가 재사용 가능
+	// 즉, 해당 슬롯은 이제 다른 페이지가 사용 가능하도록 반환됨
 	bitmap_reset(swap_table, anon_page->swap_idx);
 }

@@ -71,14 +71,33 @@ uninit_initialize(struct page *page, void *kva)
 		   (init ? init(page, aux) : true);
 }
 
-/* uninit_page가 보유한 리소스를 해제합니다. 대부분의 페이지는 다른 페이지 객체로 변환되지만,
- * 실행 중 한 번도 참조되지 않은 uninit 페이지가 프로세스 종료 시 남아 있을 수 있습니다.
- * PAGE 자체는 호출자가 해제합니다. */
+/* 
+ * uninit_destroy - 초기화되지 않은(uninit) 페이지가 제거될 때 호출되는 함수입니다.
+ * 
+ * 대부분의 uninit 페이지는 실제로 페이지 폴트가 발생하면서 
+ * 익명(anon) 페이지나 파일(file) 페이지로 전환되어 사용됩니다.
+ * 
+ * 그러나 프로세스 실행 중 참조되지 않은 uninit 페이지는 실제 메모리에 로드되지 않고,
+ * 종료 시점에까지 초기화되지 않은 상태로 남아있을 수 있습니다.
+ * 
+ * 이 함수는 그러한 경우에 대비해, uninit 페이지가 가지고 있는
+ * 부가 정보(auxiliary data)를 정리합니다.
+ * 
+ * 매개변수:
+ * - page: 제거 대상 페이지. page 객체 자체는 호출자가 해제함.
+ */
 static void
 uninit_destroy(struct page *page)
 {
+	// uninit 페이지 구조체를 가져옵니다. (현재는 사용되지 않음)
 	struct uninit_page *uninit UNUSED = &page->uninit;
-	/* TODO: 이 함수를 구현하세요.
-	 * TODO: 특별히 할 일이 없다면 그냥 return 하세요. */
+
+	/* auxiliary data 해제
+	 * aux는 lazy loading 등 페이지 초기화를 위해 미리 저장해둔 데이터입니다.
+	 * 예: lazy_load_segment에서 사용하는 lazy_load_info 구조체 등.
+	 * 
+	 * 초기화되지 않고 남은 페이지라면 이 aux도 사용되지 않았기 때문에,
+	 * 지금 해제해줘야 메모리 누수가 발생하지 않습니다.
+	 */
 	free(uninit->aux);
 }

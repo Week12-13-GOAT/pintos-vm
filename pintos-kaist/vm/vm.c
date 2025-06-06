@@ -552,38 +552,59 @@ static void *duplicate_aux(struct page *src_page)
    }
 }
 
+/*
+ * supplemental_page_table_copy - 보조 페이지 테이블(dst)에 src 페이지 테이블을 복사합니다.
+ * 
+ * src의 모든 페이지를 순회하면서 페이지 타입에 따라 적절히 복사 및 초기화 작업을 수행합니다.
+ * 
+ * 파라미터:
+ * - dst: 복사 대상 보조 페이지 테이블
+ * - src: 복사할 원본 보조 페이지 테이블
+ * 
+ * 반환값:
+ * - 모든 페이지 복사 성공 시 true 반환
+ * - 중간에 실패 발생 시 false 반환
+ */
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED, struct supplemental_page_table *src UNUSED)
 {
    struct hash_iterator i;
+   // src의 해시 테이블 첫 번째 요소로 iterator 초기화
    hash_first(&i, &src->SPT_hash_list);
    struct thread *cur = thread_current();
 
+   // src의 모든 페이지 엔트리를 순회
    while (hash_next(&i))
    {
       // src_page 정보
       struct SPT_entry *src_entry = hash_entry(hash_cur(&i), struct SPT_entry, elem);
       struct page *src_page = src_entry->page;
-      enum vm_type type = src_page->operations->type;
-      void *upage = src_page->va;
-      bool writable = src_page->writable;
+      enum vm_type type = src_page->operations->type;    // 페이지 타입 확인
+      void *upage = src_page->va;                        // 가상 주소
+      bool writable = src_page->writable;                // 쓰기 가능 여부
 
-      /* 1) type이 uninit이면 */
+      /* 1) type이 uninit이면(초기화되지 않은 페이지) */
       if (type == VM_UNINIT)
-      { // uninit page 생성 & 초기화
+      {  // 원본 페이지의 초기화 함수와 aux 정보를 복제하여 새로운 페이지 생성
          vm_initializer *init = src_page->uninit.init;
          void *aux = duplicate_aux(src_page);
+
+         // dst에 익명(anon) 페이지를 초기화 함수와 aux와 함께 할당
          vm_alloc_page_with_initializer(VM_ANON, upage, writable, init, aux);
          continue;
       }
 
-      /* 2) type이 file-backed이면 */
+      /* 2) type이 file-backed이면(파일 기반 페이지) */
       if (type == VM_FILE)
       {
+         // 원본 페이지의 파일 관련 정보 가져오기
          struct file_page *src_info = &src_page->file;
+         // 파일 핸들을 복사하고 읽을 위치 및 바이트 수 정보를 포함한 lazy_load_info 생성
          struct lazy_load_info *info = make_info(file_reopen(src_info->file), src_info->offset, src_info->read_byte);
+         // mmap 관련 정보 생성(복사할 때 매핑 카운트 등 포함)
          struct mmap_info *mmap_info = make_mmap_info(info, src_info->mapping_count);
          void *aux = mmap_info;
 
+         // 부모 프로세스(src)에서 이미 초기화된 페이지 내용을 명시적으로 복사
          if (!vm_alloc_page_with_initializer(type, upage, writable, lazy_load_segment, aux))
             return false;
 
@@ -601,12 +622,13 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED, st
          return false;
 
       // vm_claim_page으로 요청해서 매핑 & 페이지 타입에 맞게 초기화
-      if (!vm_copy_claim_page(upage, src_page, dst))
-         return false;
       // if (!vm_claim_page(upage))
       // return false;
+      /* Project 3 extra : COW */ 
+      if (!vm_copy_claim_page(upage, src_page, dst))
+         return false;
 
-      // 매핑된 프레임에 내용 로딩
+      // 매핑된 프레임(실제 메모리)에 src 페이지 내용 복사
       struct page *dst_page = spt_find_page(dst, upage);
       memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
    }
