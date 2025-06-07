@@ -25,19 +25,28 @@ static const struct page_operations anon_ops = {
 /* Initialize the data for anonymous pages */
 void vm_anon_init(void)
 {
-	/* TODO: Set up the swap_disk. */
+	/*	스왑 영역으로 사용할 디스크를 가져옵니다.
+		디스크 번호(1, 1)은 PintOS에서 일반적으로 스왑 디스크로 설정된 위치입니다.
+	*/
 	swap_disk = disk_get(1, 1);
 
-	// 예외 처리
+	// 예외 처리 : swap_disk가 없을 경우 커널 패닉 발생
 	if (swap_disk == NULL)
 	{
 		PANIC("CAN'T FIND SWAP DISK!");
 	}
 
 	/** TODO: bitmap 자료구조로 스왑 테이블 만들기
-	 * bitmap_create로 만들기
-	 * 스왑 테이블 엔트리에 이 엔트리가 비어있다는 비트 필요
-	 * bitmap 공부가 필요할듯
+		스왑 테이블은 각 스왑 슬록(swap slot)의 사용 여부를 추적하기 위한 비트맵
+		- 스왑 슬롯 : 메모리의 한 페이지를 디스크에 저장할 수 있는 최소 단위(1 page = PGSIZE)
+		- 각 스왑 슬롯은 여러 개의 디스크 섹터(sector)로 구성
+
+		따라서 스왑 슬롯의 개수 = 전체 디스크 섹터 수 / 한 페이지를 구성하는 섹터 수
+		- 디스크 전체 섹터 수 : disk_size(swap_disk)
+		- 한 페이지당 섹터 수 : PGSIZE / DISK_SECTOR_SIZE
+
+		이 값을 기반으로 비트맵을 생성
+		- bitmap의 각 비트는 하나의 스왑 슬롯을 의미하며, 0이면 비어있고 1이면 사용중
 	 */
 	swap_table = bitmap_create(disk_size(swap_disk) / (PGSIZE / DISK_SECTOR_SIZE));
 }
@@ -45,23 +54,32 @@ void vm_anon_init(void)
 /* Initialize the file mapping */
 bool anon_initializer(struct page *page, enum vm_type type, void *kva)
 {
-	// 들어온 page가 null일 경우
+	// 예외 처리 → 들어온 page가 null일 경우
 	if (page == NULL)
 	{
 		return false;
 	}
-	/* Set up the handler */
+
+	/*	이페이지는 anonymous 페이지이므로, anon_ops로 설정
+		anon_ops는 스왑 인/아웃 등을 포함한 함수 포인터 구조체
+	*/
 	page->operations = &anon_ops;
 
 	/* uninit을 anon으로 변환 */
 	struct anon_page *anon_page = &page->anon; // page->anon은 포인터가 아니라 구조체 자체여서 항상 유효한 주소를 반환함
 
-	/* swap index 초기화 */
+	/* swap index 초기화 
+		-1은 아직 스왑 아웃된 적이 없다는 것을 의미
+	*/
 	anon_page->swap_idx = -1;
 
-	/* 물리 주소 초기화 */
+	/*	페이지의 물리 주소(kva)가 유효하며,
+		해당 페이지의 frame이 1개 이하로만 참조되고 있을 경우
+		새로 할당된 물리 페이지라고 간주하고 초기화함
+	*/
 	if (kva != NULL && page->frame->ref_cnt <= 1)
 	{
+		// 물리 페이지 전체를 0으로 초기화(보안 및 예측 가능한 동작 보장)
 		memset(kva, 0, PGSIZE);
 	}
 
@@ -150,19 +168,32 @@ anon_swap_out(struct page *page)
 	return true;
 }
 
-/* 익명 페이지를 소멸시킵니다. PAGE는 호출자가 해제합니다. */
+/* 
+ * anon_destroy - 익명(anonymous) 페이지를 소멸시킵니다.
+ * 
+ * 이 함수는 주어진 페이지가 메모리에서 제거될 때 호출되며,
+ * 해당 페이지가 스왑 공간을 사용 중이었다면 해당 스왑 슬롯을 해제합니다.
+ * 
+ * 매개변수:
+ * - page: 제거할 대상 페이지 (호출자가 page 자체 메모리 해제는 수행함)
+ */
 static void
 anon_destroy(struct page *page)
 {
+	// 페이지의 anon_page 구조체 접근 (swap 관련 정보 포함)
 	struct anon_page *anon_page = &page->anon;
-	// swap_idx가 0보다 작을 경우는 페이지가 스왑 아웃이 된 적이 없거나 이미 복구 되어 swap_idx가 -1이면 추가 작업 X, 종료
+
+	// 현재 스레드의 pml4에서 이 페이지에 대한 매핑을 제거 (VA -> PA 연결 해제)
 	pml4_clear_page(thread_current()->pml4, page->va);
+
+	// 스왑 아웃된 적이 없거나, 이미 스왑에서 복구되어 유효하지 않은 스왑 슬롯이면 아무 작업도 하지 않음
+	// swap_idx < 0이면 해당 페이지는 스왑 슬롯을 점유하고 있지 않음
 	if (anon_page->swap_idx < 0)
 	{
-		return;
+		return;  // 추가 작업 없이 종료
 	}
 
 	// 스왑 테이블에서 해당 스왑 슬롯을 비어있는 상태로 표시
-	// 즉, 더 이상 해당 스왑 슬롯은 사용되지 않으며, 이후 다른 페이지가 재사용 가능
+	// 즉, 해당 슬롯은 이제 다른 페이지가 사용 가능하도록 반환됨
 	bitmap_reset(swap_table, anon_page->swap_idx);
 }
