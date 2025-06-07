@@ -191,27 +191,28 @@ static struct frame *vm_get_victim(void)
    struct frame *victim;
 
    ASSERT(victim != NULL);
-   if(clock_start == NULL || clock_start == list_end(&frame_table))
+   if (clock_start == NULL || clock_start == list_end(&frame_table))
       clock_start = list_begin(&frame_table);
 
    clock_now = clock_start;
-   do{
-      victim = list_entry(clock_now,struct frame, elem);
+   do
+   {
+      victim = list_entry(clock_now, struct frame, elem);
 
-      bool success = pml4_is_accessed(thread_current()->pml4,victim->page->va);
-      if(success == false){
+      bool success = pml4_is_accessed(thread_current()->pml4, victim->page->va);
+      if (success == false)
+      {
          clock_start = list_next(clock_now);
          return victim;
       }
 
-
-      pml4_set_accessed(thread_current()->pml4,victim->page->va, false);
+      pml4_set_accessed(thread_current()->pml4, victim->page->va, false);
       clock_now = list_next(clock_now);
-      if(clock_now == list_end(&frame_table))
+      if (clock_now == list_end(&frame_table))
          clock_now = list_begin(&frame_table);
-   } while(clock_now != clock_start);
+   } while (clock_now != clock_start);
 
-   victim = list_entry(clock_now,struct frame, elem);
+   victim = list_entry(clock_now, struct frame, elem);
    clock_start = list_next(clock_now);
 
    return victim;
@@ -495,7 +496,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED, st
       { // uninit page 생성 & 초기화
          vm_initializer *init = src_page->uninit.init;
          void *aux = duplicate_aux(src_page);
-         vm_alloc_page_with_initializer(VM_ANON, upage, writable, init, aux);
+         vm_alloc_page_with_initializer(src_page->uninit.type, upage, writable, init, aux);
          continue;
       }
 
@@ -510,7 +511,6 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED, st
          if (!vm_alloc_page_with_initializer(type, upage, writable, lazy_load_segment, aux))
             return false;
 
-         /* 부모에서 이미 초기화된 페이지이기에 바로 명시적 초기화 호출 */
          if (!vm_copy_claim_page(upage, src_page, dst))
             return false;
 
@@ -519,15 +519,11 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED, st
 
       /* 3) type이 anon이면 */
       if (!vm_alloc_page_with_initializer(type, upage, writable, NULL, NULL)) // uninit page 생성 & 초기화
-         // init(lazy_load_segment)는 page_fault가 발생할때 호출됨
-         // 지금 만드는 페이지는 page_fault가 일어날 때까지 기다리지 않고 바로 내용을 넣어줘야 하므로 필요 없음
          return false;
 
       // vm_claim_page으로 요청해서 매핑 & 페이지 타입에 맞게 초기화
       if (!vm_copy_claim_page(upage, src_page, dst))
          return false;
-      // if (!vm_claim_page(upage))
-      // return false;
 
       // 매핑된 프레임에 내용 로딩
       struct page *dst_page = spt_find_page(dst, upage);
