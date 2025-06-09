@@ -323,8 +323,11 @@ static void
 vm_stack_growth(void *addr UNUSED)
 {
    /* 스택 최하단에 익명 페이지를 추가하여 사용
-    * addr은 PGSIZE로 내림(정렬)하여 사용    */
+    * addr은 PGSIZE로 내림(정렬)하여 사용 */
    vm_alloc_page(VM_ANON, addr, true); // 스택 최하단에 익명 페이지 추가
+   /* 실제 물리 메모리 프레임을 할당하고, 페이지 활성화(claim)함
+      이 작업이 있어야 페이지 폴트 해결 및 해당 주소 접근 가능
+   */
    vm_claim_page(addr);
 }
 
@@ -371,34 +374,43 @@ vm_handle_wp(struct page *page UNUSED)
 bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
                          bool user UNUSED, bool write UNUSED, bool not_present UNUSED)
 {
+   // 현재 쓰레드의 SPT를 가져옴
    struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
+   // Fault가 발생한 주소를 페이지 단위로 정렬(페이지 시작 주소로 내림)
    addr = pg_round_down(addr);
+   // 유저 스택의 rsp 가져오기
+   uintptr_t rsp = thread_current()->user_rsp; 
 
-   uintptr_t rsp = thread_current()->user_rsp; // 유저 스택의 rsp 가져오기
-
+   // spt page 찾기
    struct page *page = spt_find_page(spt, addr);
-   // if (page == NULL)
-   // {
-   //    return false;
-   // }
-   // 찐 폴트
-   if (page == NULL && (uintptr_t)addr >= rsp - STACK_GROW_RANGE && addr < USER_STACK && addr >= USER_STACK - (1 << 20))
-   {
-      vm_stack_growth(addr);
-      return true;
-   }
 
+   
+   // 스택 확장 판단 조건
+   if (page == NULL                                   // 1. SPT에 존재 X
+      && (uintptr_t)addr >= rsp - STACK_GROW_RANGE   // 2. 접근 주소가 현재 유저 스택보다 아래
+      && addr < USER_STACK                           // 3. 접근 주소가 유저 영역(USER_STACK) 안쪽이고
+      && addr >= USER_STACK - (1 << 20))             // 4. 접근 주소가 USER_STACK 기준으로 1MB 이상 확장되지 않은 경우
+      {
+         vm_stack_growth(addr);
+         return true;
+      }
+      
+   // 찐폴트 → 페이지가 없고 스택 확장 조건도 안됨
    if (page == NULL)
       return false;
 
+   // 쓰기 접근인데 페이지가 쓰기 불가능한 경우 → 보호 위반
    if (write == true && !page->writable)
       return false;
 
+   // Project 3 : VM extra COW
    if (write == true && page->writable && page->frame != NULL)
       return vm_handle_wp(page);
-
+   
+   // swap_in 함수 존재 여부 확인
    ASSERT(page->operations != NULL && page->operations->swap_in != NULL);
-
+   
+   // 실제 물리 메모리에 페이지를 할당하고 매핑
    return vm_do_claim_page(page);
 }
 
