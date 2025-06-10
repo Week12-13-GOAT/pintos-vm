@@ -116,18 +116,25 @@ struct SPT_entry
 	struct hash_elem elem;
 };
 
-struct lazy_load_info
-{
-	struct file *file;
-	off_t offset;
-	size_t readbyte;
-	size_t zerobyte;
+/* 
+ * 페이지가 lazy loading 될 때 사용될 보조 정보 구조체
+ * 이 구조체는 실제 페이지 fault가 발생했을 때 필요한 파일 위치 및 읽기 정보를 포함함
+ */
+struct lazy_load_info {
+    struct file *file;       // 읽을 파일 포인터 (reopen된 파일 핸들)
+    off_t offset;            // 해당 페이지의 파일 내 시작 위치 (offset)
+    size_t readbyte;         // 파일에서 읽어야 할 바이트 수
+    size_t zerobyte;         // 나머지를 0으로 채워야 할 바이트 수 (ex. .bss 영역 같은 경우)
 };
 
-struct mmap_info
-{
-	struct lazy_load_info *info;
-	int mapping_count;
+/*
+ * mmap을 통해 매핑된 각 페이지에 대한 식별자 역할을 하는 구조체
+ * - info는 해당 페이지의 lazy loading 정보를 포함
+ * - mapping_count는 mmap 전체 중 몇 번째 페이지인지 나타냄
+ */
+struct mmap_info {
+    struct lazy_load_info *info;  // 지연 로딩에 필요한 보조 정보
+    int mapping_count;            // mmap된 페이지 중 순서 (ex. 0번째 페이지, 1번째 ...)
 };
 
 #include "threads/thread.h"

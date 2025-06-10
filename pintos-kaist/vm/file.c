@@ -198,24 +198,51 @@ void *do_mmap(void *addr, size_t length, int writable,
 			  struct file *file, off_t offset)
 {
 	/* 지연 로딩과 스왑 시의 백업 정보 저장 */
+	/* mmap 대상 파일의 전체 크기*/
 	off_t file_size = file_length(file);
+
+	/* offset 이후 실제로 읽을 수 있는 크기 계산 */
 	off_t read_size = file_size - offset;
-	if (read_size < 0)
+
+	/* 실제로 읽을 수 있는 크기가 0미만이면 읽을 수 있는 게 없으므로 0으로 설정 */
+	if (read_size < 0) {
 		read_size = 0;
+	}
+
+	/* 남은 매핑할 파일 길이 */
 	size_t remain_length = (size_t)read_size;
+
+	/* 현재 매핑 중인 주소 및 파일 offset */
 	void *cur_addr = addr;
 	off_t cur_offset = offset;
-	struct file *reopen_file = file_reopen(file);
-	int mapping_count = 0; /* mmap은 여러 페이지에 걸쳐 매핑될 수 있습니다.
-	munmap 시에 어디까지 해제해줄 것인지 판단할 기준이 됩니다 */
 
+	/* 	파일은 mmap 동안 읽기 전용으로 reopen 해서 사용됨
+		원본 파일은 fd_table에 유지되므로 별도로 reopen 필요
+	*/
+	struct file *reopen_file = file_reopen(file);
+	/*	mmap은 여러 페이지에 걸쳐 매핑될 수 있습니다.
+		munmap 시에 어디까지 해제해줄 것인지 판단할 기준이 됩니다 
+	*/
+	int mapping_count = 0; 
+
+	/* 매핑해야 할 전체 크기를 페이지 단위로 반복하며 처리 */
 	while (remain_length > 0)
 	{
-		/* 남은 mmap 매핑 길이가 4KB보다 크면 4KB로 맞춥니다 */
+		/*	한 페이지(4KB) 단위로 매핑 처리
+			남은 크기가 한 페이지보다 작다면, 그만큼만 할당
+		*/
 		size_t allocate_length = remain_length > PGSIZE ? PGSIZE : remain_length;
-		/* 지연 로딩 시 필요한 정보를 생성합니다 */
+		
+		/*	지연 로딩에 사용할 info 구조체 생성
+			reopen된 파일 핸들, 현재 offset, 읽을 크기 등을 저장
+		*/
 		struct lazy_load_info *info = make_info(reopen_file, cur_offset, allocate_length);
+		
+		/*	mmap 영역이라는 것을 표시하고,
+			해당 매핑에 대한 식별자(mapping_count)를 포함한 구조체 생성
+		*/
 		struct mmap_info *mmap_info = make_mmap_info(info, mapping_count);
+		
 		void *aux = mmap_info;
 
 		/* mmap 또한 지연 로딩이 필요합니다 */
@@ -223,6 +250,8 @@ void *do_mmap(void *addr, size_t length, int writable,
 		/* remain_length는 unsigned 형입니다. 따라서 음수가 없기에 미리 break를 해줘야 합니다 */
 		if (remain_length < PGSIZE)
 			break;
+		
+		/* 다음 페이지를 위해 주소, offset, 남은 길이 갱신 */
 		remain_length -= PGSIZE;
 		cur_addr += PGSIZE;
 		cur_offset += PGSIZE;
@@ -232,29 +261,39 @@ void *do_mmap(void *addr, size_t length, int writable,
 
 static bool is_my_mmap(void *addr, struct file *mmap_file, int mmap_count)
 {
+	/* 현재 스레드의 보조 테이블 가져오기 */
 	struct supplemental_page_table *spt = &thread_current()->spt;
+	
+	/* addr에 해당하는 페이지를 보조 테이블에서 찾음 */
 	struct page *find_page = spt_find_page(spt, addr);
+	
+	/* 예외 처리 → 해당 주소에 매핑된 페이지가 존재하지 않으면 false */
 	if (find_page == NULL)
 		return false;
 
+	/* 해당 페이지가 참조하는 있는 파일 객체를 가져옴*/
 	struct file *find_file = find_page->file.file;
-	/* 파일이 NULL이거나 인자로 받은 파일과 다른가? */
-	/* NULL이거나 다르면 다른 페이지임 !! */
+
+	/*	파일이 존재하지 않거나, mmap시 사용된 파일과 다르면 false
+		→ 이는 다른 mmap의 페이지일 가능성이 높음
+	*/
 	if (find_file == NULL || find_file != mmap_file)
 		return false;
 
-	/**같은 파일이어도 매핑 카운트가 맞지 않으면
-	 * 서로 다른 페이지임 !!
-	 */
+	/*	동일한 파일이라 하더라도, mmap 내 인덱스(mapping_count)가 다르면
+		→ 이는 다른 mmap에서 온 페이지일 수 있으므로 false
+	*/
 	if (find_page->file.mapping_count != mmap_count)
 		return false;
 
+	/* 위에 예외 케이스에 안걸린다면 mmap영역의 연속된 페이지임*/
 	return true;
 }
 
 /* Do the munmap */
 void do_munmap(void *addr)
 {
+	/* 현재 스레드의 보조 테이블을 가져오기 */
 	struct supplemental_page_table *spt = &thread_current()->spt;
 	/* SPT에 없으면 해제할 수 없습니다 !! */
 	/* 항상 mmap 영역의 첫번째 주소를 준다고 합니다 */
@@ -262,9 +301,10 @@ void do_munmap(void *addr)
 	if (target_page == NULL)
 		return;
 
+	/* 해당 페이지가 mmap에 의해 매핑된 파일인지 확인*/
 	struct file_page *file_page = &target_page->file;
-	struct file *target_file = file_page->file;
-	int target_mmap_count = file_page->mapping_count;
+	struct file *target_file = file_page->file;			// 넌 어떤 파일이냐...?
+	int target_mmap_count = file_page->mapping_count;	// mmap에서 몇 번째 페이지인지
 
 	addr += PGSIZE; // 다음 mmap_file 찾기
 	/* while 루프를 통해 연속된 페이지가 같은 mmap 영역인지 확인합니다 */

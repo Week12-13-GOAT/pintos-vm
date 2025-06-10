@@ -254,12 +254,17 @@ void sys_munmap(void *addr)
 
 void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 {
-	/* 파일 입출력에는 mmap이 불가능합니다 */
+	/* 	fd = 파일 디스크립터 번호
+		fd = 0 (stdin), 1(stdout)으로 이미 예약되어 있어 mmap에 사용 X
+	*/
 	if (fd < 2)
 		return MAP_FAILED;
 
-	/* 파일의 사이즈가 0이면 mmap이 불가능합니다 */
+	/* 	fd에 해당하는 파일 크기를 가져옴 */
 	int filesize = sys_filesize(fd);
+	/*	파일 크기가 0이면 매핑할 내용이 없으므로 실패 처리.
+		요청한 length가 0이면 매핑할 크기가 없으므로 실패 처리.	
+	*/
 	if (filesize == 0 || length == 0)
 		return MAP_FAILED;
 
@@ -267,16 +272,23 @@ void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	if (length > (uintptr_t)addr)
 		return MAP_FAILED;
 
-	/* addr이나 offset이 페이지 정렬되어있지 않으면 mmap이 불가능합니다 */
-	if ((uint64_t)addr == 0 || (uint64_t)addr % PGSIZE != 0 || offset % PGSIZE != 0 || !is_user_vaddr(addr))
-		return MAP_FAILED;
+	/* 주소 유효성 검사 */
+	if ((uint64_t)addr == 0 || 				// 주소가 NULL인지 검사
+		(uint64_t)addr % PGSIZE != 0 || 	// 페이지 단위 정렬 검사
+		offset % PGSIZE != 0 || 			// offset 페이지 단위 정렬 검사
+		!is_user_vaddr(addr)) {				// 유저 공간 주소인지 검사
+			return MAP_FAILED;
+		}
 
-	/* 해당 fd에 파일이 없으면 mmap이 불가능합니다 */
+	/* 현재 스레드가 열린 파일 테이블에서 fd에 해당하는 파일 포인터를 얻음 */
 	struct file *target_file = thread_current()->fd_table[fd];
+	/*	예외 처리*/
 	if (target_file == NULL)
 		return MAP_FAILED;
 
+	/* 매핑할 시작 주소 저장 */
 	void *start_page = addr;
+	/* 매핑할 끝 주소 (addr + length)를 페이지 크기로 올림 처리 */
 	void *end_page = pg_round_up(addr + length);
 
 	/* 해당 페이지 영역에 이미 할당된 페이지가 있으면 mmap이 불가능 합니다 */
@@ -286,6 +298,7 @@ void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 			return MAP_FAILED;
 	}
 
+	/* 실제 mmap을 수행하는 내부 함수 호출*/
 	do_mmap(addr, length, writable, target_file, offset);
 
 	return addr;
